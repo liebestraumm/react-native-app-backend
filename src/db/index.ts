@@ -1,23 +1,40 @@
-import { MongoClient, ServerApiVersion } from "mongodb"
-import "dotenv/config"
-// Create a MongoClient with a MongoClientOptions object to set the Stable API version
-const client = new MongoClient(process.env.DB_HOST ?? "", {
+import { MongoClient, ServerApiVersion, Db } from "mongodb";
+import "dotenv/config";
+
+const uri = process.env.DB_HOST ?? "";
+if (!uri) {
+  throw new Error("DB_HOST environment variable is not set");
+}
+
+const client = new MongoClient(uri, {
   serverApi: {
     version: ServerApiVersion.v1,
     strict: true,
     deprecationErrors: true,
-  }
+  },
 });
-async function run() {
+
+let db: Db | null = null;
+
+export const connectToDatabase = async () => {
+  if (db) return db;
   try {
-    // Connect the client to the server	(optional starting in v4.7)
     await client.connect();
-    // Send a ping to confirm a successful connection
-    await client.db("marketdb").command({ ping: 1 });
+    db = client.db("marketdb");
+    await db.command({ ping: 1 });
     console.log("Pinged your deployment. You successfully connected to MongoDB!");
-  } finally {
-    // Ensures that the client will close when you finish/error
-    await client.close();
+    return db;
+  } catch (err) {
+    console.error("Failed to connect to MongoDB:", err);
+    throw err;
   }
-}
-run().catch(console.dir);
+};
+
+export const getDb = (): Db => {
+  if (!db) {
+    throw new Error("Database not connected. Call connectToDatabase() at app startup.");
+  }
+  return db;
+};
+
+export { client };
