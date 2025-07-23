@@ -3,7 +3,7 @@ import { HttpError } from "./models/HttpError";
 import HttpCode from "./constants/httpCode";
 import productRoute from "./routes/productRoute";
 import appRoute from "./routes/authRoute";
-import { connectToDatabase } from "./db";
+import "./db";
 
 const app = express();
 app.use(express.json());
@@ -31,9 +31,8 @@ app.use(
 
 const startServer = async () => {
   try {
-    await connectToDatabase();
-    app.listen(3000, () => {
-      console.log("App running on port 3000!");
+    app.listen(process.env.PORT ?? 3000, () => {
+      console.log(`App running on port ${process.env.PORT ?? 3000}!`);
     });
   } catch (err) {
     console.error("Failed to connect to database. Server not started.", err);
