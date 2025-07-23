@@ -51,32 +51,20 @@ export const createNewUser: RequestHandler = async (
     };
     const recipients = [user.email];
 
-    try {
-      await transport.sendMail({
-        from: sender,
-        to: recipients,
-        subject: "You are awesome!",
-        html: `<p>Click <a href="${link}">here</a> to verify your email.</p>`,
-        category: "Integration Test",
-      });
-    } catch (error) {
-      console.log("Error sending email: " + error);
-    }
+    await transport.sendMail({
+      from: sender,
+      to: recipients,
+      subject: "You are awesome!",
+      html: `<p>Click <a href="${link}">here</a> to verify your email.</p>`,
+      category: "Integration Test",
+    });
 
     // Send message back to check email inbox.
     response
       .status(201)
       .json({ message: "Please check your inbox for verification link" });
   } catch (error) {
-    if (error instanceof HttpError) {
-      console.log(error);
-      return next(error);
-    }
-    const unexpectedError = new HttpError(
-      `Server unexpected error - ${error}`,
-      HttpCode.INTERNAL_SERVER_ERROR
-    );
-    console.log(unexpectedError);
-    return next(unexpectedError);
+    console.log(error);
+    next(error);
   }
 };
