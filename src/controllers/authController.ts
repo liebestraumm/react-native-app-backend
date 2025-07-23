@@ -49,7 +49,7 @@ export const createNewUser: RequestHandler = async (
       address: "hello@demomailtrap.co",
       name: "Mailtrap Test",
     };
-    const recipients = ["caav2022x@gmail.com"];
+    const recipients = [user.email];
 
     await transport.sendMail({
       from: sender,
@@ -65,6 +65,6 @@ export const createNewUser: RequestHandler = async (
       .json({ message: "Please check your inbox for verification link" });
   } catch (error) {
     console.log(error);
-    next(error);
+    return next(error);
   }
 };
