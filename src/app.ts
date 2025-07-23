@@ -3,6 +3,7 @@ import { HttpError } from "./models/HttpError";
 import HttpCode from "./constants/httpCode";
 import productRoute from "./routes/productRoute";
 import appRoute from "./routes/authRoute";
+import "../src/db"
 
 const app = express();
 app.use(express.json());
