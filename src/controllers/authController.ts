@@ -2,6 +2,11 @@ import { RequestHandler } from "express";
 import UserModel from "../models/User";
 import { HttpError } from "../models/HttpError";
 import HttpCode from "../constants/httpCode";
+import crypto from "crypto";
+import AuthVerificationTokenModel from "../models/AuthVerificationToken";
+import "dotenv/config";
+import nodemailer from "nodemailer";
+import { MailtrapTransport } from "mailtrap";
 
 export const createNewUser: RequestHandler = async (
   request,
@@ -19,10 +24,49 @@ export const createNewUser: RequestHandler = async (
         HttpCode.UNAUTHORIZED
       );
 
-    await UserModel.create({ name, email, password });
+    const user = await UserModel.create({ name, email, password });
+
+    // Generate and Store verification token
+    const token = crypto.randomBytes(36).toString("hex");
+    await AuthVerificationTokenModel.create({
+      owner: user._id,
+      token,
+    });
+
+    // Send verification link with token to register email.
+    const link = `${process.env.VERIFICATION_LINK ?? ""}?id=${
+      user._id
+    }&token=${token}`;
+
+    const TOKEN = process.env.MAILTRAP_API_TOKEN ?? "";
+    const transport = nodemailer.createTransport(
+      MailtrapTransport({
+        token: TOKEN,
+      })
+    );
+
+    const sender = {
+      address: "hello@demomailtrap.co",
+      name: "Mailtrap Test",
+    };
+    const recipients = [user.email];
+
+    try {
+      await transport.sendMail({
+        from: sender,
+        to: recipients,
+        subject: "You are awesome!",
+        html: `<p>Click <a href="${link}">here</a> to verify your email.</p>`,
+        category: "Integration Test",
+      });
+    } catch (error) {
+      console.log("Error sending email: " + error);
+    }
 
     // Send message back to check email inbox.
-    response.status(201).json({ message: "User created successfully" });
+    response
+      .status(201)
+      .json({ message: "Please check your inbox for verification link" });
   } catch (error) {
     if (error instanceof HttpError) {
       console.log(error);
