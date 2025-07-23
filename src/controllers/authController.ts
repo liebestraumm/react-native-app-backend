@@ -49,7 +49,7 @@ export const createNewUser: RequestHandler = async (
       address: "hello@demomailtrap.co",
       name: "Mailtrap Test",
     };
-    const recipients = [user.email];
+    const recipients = ["caav2022x@gmail.com"];
 
     await transport.sendMail({
       from: sender,
