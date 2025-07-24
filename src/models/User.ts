@@ -6,7 +6,7 @@ interface Methods {
   comparePassword: (password: string) => Promise<boolean>;
 }
 
-const userSchema = new Schema<IUserDocument, Methods>(
+const userSchema = new Schema<IUserDocument, {}, Methods>(
   {
     email: {
       type: String,
@@ -23,8 +23,9 @@ const userSchema = new Schema<IUserDocument, Methods>(
     },
     verified: {
       type: Boolean,
-      default: false
-    }
+      default: false,
+    },
+    tokens: [String]
   },
   {
     timestamps: true,
@@ -60,11 +61,8 @@ userSchema.pre("save", async function (next) {
 //   return await compare(password, this.password);
 // };
 
-userSchema.methods.comparePassword = (document: IUserDocument) => (password: string) => {
-  const compareAsync = async (pwd: string, hash: string): Promise<boolean> => 
-    await compare(pwd, hash);
-  
-  return compareAsync(password, document.password);
+userSchema.methods.comparePassword = async function (password) {
+  return await compare(password, this.password);
 };
 
 const UserModel = model("User", userSchema);

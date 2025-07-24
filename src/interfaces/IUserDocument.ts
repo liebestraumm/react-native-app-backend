@@ -4,5 +4,6 @@ export interface IUserDocument extends Document {
     email: string;
     password: string;
     name: string;
-    verified: boolean
+    verified: boolean,
+    tokens: Array<string>
   }
