@@ -139,3 +139,9 @@ export const signIn: RequestHandler = async (request, response, next) => {
     return next(error);
   }
 };
+
+export const sendProfile: RequestHandler = async (request, response, next) => {
+  response.status(HttpCode.OK).json({
+    data: request.user
+  })
+}
