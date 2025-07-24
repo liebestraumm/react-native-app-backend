@@ -7,6 +7,7 @@ import AuthVerificationTokenModel from "../models/AuthVerificationToken";
 import "dotenv/config";
 import nodemailer from "nodemailer";
 import { MailtrapTransport } from "mailtrap";
+import { IAuthVerificationTokenDocument } from "../interfaces/IAuthVerificationTokenDocument";
 
 export const createNewUser: RequestHandler = async (
   request,
@@ -29,8 +30,8 @@ export const createNewUser: RequestHandler = async (
     // Generate and Store verification token
     const token = crypto.randomBytes(36).toString("hex");
     await AuthVerificationTokenModel.create({
-      owner: user._id,
-      token,
+      user_id: user._id,
+      token
     });
 
     // Send verification link with token to register email.
@@ -63,6 +64,27 @@ export const createNewUser: RequestHandler = async (
     response
       .status(201)
       .json({ message: "Please check your inbox for verification link" });
+  } catch (error) {
+    console.log(error);
+    return next(error);
+  }
+};
+
+export const verifyEmail: RequestHandler = async (request, response, next) => {
+  const { id, token } = request.query;
+  try {
+    if (typeof token !== "string") {
+      throw new HttpError("Invalid token", HttpCode.BAD_REQUEST);
+    }
+    const authToken = await AuthVerificationTokenModel.findOne({ user_id: id });
+    if (!authToken)
+      throw new HttpError("Forbidden request!", HttpCode.FORBIDDEN);
+    const isMatched = await authToken?.compareToken(token);
+    if (!isMatched) throw new HttpError("Invalid token", HttpCode.BAD_REQUEST);
+
+    await UserModel.findByIdAndUpdate(id, { verified: true });
+    await AuthVerificationTokenModel.findByIdAndDelete(authToken._id);
+    response.status(HttpCode.OK).json({ message: "Thanks for joining us, your email is verified" });
   } catch (error) {
     console.log(error);
     return next(error);
