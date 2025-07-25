@@ -5,10 +5,9 @@ import HttpCode from "../constants/httpCode";
 import crypto from "crypto";
 import AuthVerificationTokenModel from "../models/AuthVerificationToken";
 import "dotenv/config";
-import nodemailer from "nodemailer";
-import { MailtrapTransport } from "mailtrap";
 import jwt from "jsonwebtoken";
 import Mail from "../lib/mail";
+import PasswordResetTokenModel from "../models/PasswordResetToken";
 
 export const createNewUser: RequestHandler = async (
   request,
@@ -39,10 +38,7 @@ export const createNewUser: RequestHandler = async (
     const link = `${process.env.VERIFICATION_LINK ?? ""}?id=${
       user._id
     }&token=${token}`;
-    const sender = {
-      address: "noreply@demomailtrap.co",
-      name: "Mailtrap Test",
-    };
+    const sender = process.env.MAILTRAP_SENDER ?? "";
     const recipients = [user.email];
     const mailBody = {
       subject: "Verification Mail",
@@ -106,10 +102,10 @@ export const signIn: RequestHandler = async (request, response, next) => {
 
     // Generate access & refresh token if pasword matches.
     const payload = { id: user._id };
-    const accessToken = jwt.sign(payload, "secret", {
-      expiresIn: "1m",
+    const accessToken = jwt.sign(payload, process.env.JWT_SECRET ?? "", {
+      expiresIn: "15m",
     });
-    const refreshToken = jwt.sign(payload, "secret");
+    const refreshToken = jwt.sign(payload, process.env.JWT_SECRET ?? "");
 
     // Store refresh token inside the Users table.
     if (!user.tokens) user.tokens = [refreshToken];
@@ -158,10 +154,7 @@ export const generateVerificationLink: RequestHandler = async (
     const link = `${
       process.env.VERIFICATION_LINK ?? ""
     }?id=${id}&token=${token}`;
-    const sender = {
-      address: "noreply@demomailtrap.co",
-      name: "Mailtrap Test",
-    };
+    const sender = process.env.MAILTRAP_SENDER ?? "";
     const recipients = [email];
     const mailBody = {
       subject: "Verification Link",
@@ -187,11 +180,14 @@ export const refreshAccessToken: RequestHandler = async (
   try {
     if (!refreshToken)
       throw new HttpError("Unauthorized request", HttpCode.FORBIDDEN);
-    const payload = jwt.verify(refreshToken, "secret") as { id: string };
+    const payload = jwt.verify(refreshToken, process.env.JWT_SECRET ?? "") as {
+      id: string;
+    };
 
-    if (!payload.id) throw new HttpError("Unauthorized request", HttpCode.UNAUTHORIZED)
+    if (!payload.id)
+      throw new HttpError("Unauthorized request", HttpCode.UNAUTHORIZED);
 
-          // Find user with payload.id and refresh token
+    // Find user with payload.id and refresh token
     const user = await UserModel.findOne({
       _id: payload.id,
       tokens: refreshToken,
@@ -199,26 +195,165 @@ export const refreshAccessToken: RequestHandler = async (
     // If the refresh token is valid and no user found, refreshtoken is compromised and hence it can't be used to create another access token
     if (!user) {
       // User is compromised, remove all the previous tokens
-      const test = await UserModel.findByIdAndUpdate(payload.id, { tokens: [] });
-      console.log(test)
+      const test = await UserModel.findByIdAndUpdate(payload.id, {
+        tokens: [],
+      });
+      console.log(test);
       throw new HttpError("Unauthorized Request", HttpCode.UNAUTHORIZED);
     }
     // If the token is valid and user is found, create new refresh and access token
     const refreshTokenPayload = { id: user._id };
-    const newAccessToken = jwt.sign(refreshTokenPayload, "secret", {
-      expiresIn: "1m",
-    });
-    const newRefreshToken = jwt.sign(refreshTokenPayload, "secret");
+    const newAccessToken = jwt.sign(
+      refreshTokenPayload,
+      process.env.JWT_SECRET ?? "",
+      {
+        expiresIn: "15m",
+      }
+    );
+    const newRefreshToken = jwt.sign(
+      refreshTokenPayload,
+      process.env.JWT_SECRET ?? ""
+    );
 
     // Remove previous token, update user and send new tokens
     user.tokens = user.tokens.filter((token) => token !== refreshToken);
-    user.tokens.push(newRefreshToken)
+    user.tokens.push(newRefreshToken);
     await user.save();
     response.status(HttpCode.OK).json({
       message: "Tokens updated!",
       data: {
         refresh: newRefreshToken,
         access: newAccessToken,
+      },
+    });
+  } catch (error) {
+    console.log(error);
+    return next(error);
+  }
+};
+
+export const signOut: RequestHandler = async (request, response, next) => {
+  const { refreshToken } = request.body;
+  try {
+    // Remove the refresh token
+    const user = await UserModel.findOne({
+      _id: request.user.id,
+      tokens: refreshToken,
+    });
+    if (!user)
+      throw new HttpError(
+        "Unauthorized request, user not found",
+        HttpCode.FORBIDDEN
+      );
+    const newTokens = user.tokens.filter((token) => token !== refreshToken);
+    user.tokens = newTokens;
+    await user.save();
+    response.status(HttpCode.OK).json({ message: "You're signed out" });
+  } catch (error) {
+    console.log(error);
+    return next(error);
+  }
+};
+
+export const generateForgetPasswordLink: RequestHandler = async (
+  request,
+  response,
+  next
+) => {
+  // Ask users for email
+  const { email } = request.body;
+  try {
+    // Find users with the given email and send error if there is no user
+    const user = await UserModel.findOne({ email });
+    if (!user) throw new HttpError("Account not found", HttpCode.NOT_FOUND);
+
+    // Remove token
+    await PasswordResetTokenModel.findOneAndDelete({ user_id: user._id });
+
+    // Create new token
+    const token = crypto.randomBytes(36).toString("hex");
+    await PasswordResetTokenModel.create({ user_id: user._id, token });
+
+    // Send the link to user's email
+    const passResetLink = `${process.env.PASSWORD_RESET_LINK}?id=${user._id}&token=${token}`;
+    const recipients = [user.email];
+    const sender = "security@myapp.com";
+    const mailBody = {
+      subject: "Reset password Link",
+      html: `<p>Click <a href="${passResetLink}">here</a> to update your password.</p>`,
+    };
+    const resetPasswordMail = new Mail(recipients, sender, mailBody);
+    resetPasswordMail.send();
+    // Send response back
+    response.status(HttpCode.OK).json({ message: "Reset password link sent" });
+  } catch (error) {
+    console.log(error);
+    return next(error);
+  }
+};
+
+export const grantValid: RequestHandler = async (request, response, next) => {
+  response.json({ valid: true });
+};
+
+export const updatePassword: RequestHandler = async (
+  request,
+  response,
+  next
+) => {
+  // Read user id, reset pass token and password.
+  const { id, password } = request.body;
+  try {
+    // If valid find user with the given id.
+    const user = await UserModel.findById(id);
+    if (!user) throw new HttpError("Unauthorized access", HttpCode.FORBIDDEN);
+    // Check if user is using same password.
+    const matched = await user.comparePassword(password);
+    // If there is no user or user is using the same password send error res.
+    if (matched)
+      throw new HttpError(
+        "The new password must be different!",
+        HttpCode.UNPROCESSABLE_ENTITY
+      );
+    // Else update new password
+    user.password = password;
+    await user.save();
+
+    // Remove password reset token.
+    await PasswordResetTokenModel.findOneAndDelete({ owner: user._id });
+
+    // Send confirmation email.
+    const recipients = [user.email];
+    const sender = "security@myapp.com";
+    const mailBody = {
+      subject: "Reset password Link",
+      html: `<h1>Your password is updated, you can now use your new password.</h1>`,
+    };
+    const resetPasswordMail = new Mail(recipients, sender, mailBody);
+    resetPasswordMail.send();
+    response
+      .status(HttpCode.OK)
+      .json({ message: "Password resets successfully." });
+  } catch (error) {
+    console.log(error);
+    return next(error);
+  }
+};
+
+export const updateProfile: RequestHandler = async (request, response, next) => {
+  const { name } = request.body;
+  try {
+    // Validate name
+    if (typeof name !== "string" || name.trim().length < 3)
+      throw new HttpError("Invalid name", HttpCode.UNPROCESSABLE_ENTITY);
+    // Find user and update the name
+    await UserModel.findByIdAndUpdate(request.user.id, { name });
+    // Send the new profile back
+    response.json({
+      message: "Profile updated!",
+      data: {
+        ...request.user,
+        name,
       },
     });
   } catch (error) {

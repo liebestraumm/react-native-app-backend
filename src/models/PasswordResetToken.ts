@@ -1,12 +1,12 @@
 import { compare, genSalt, hash } from "bcrypt";
 import { Schema, model } from "mongoose";
-import { IAuthVerificationTokenDocument } from "../interfaces/IAuthVerificationTokenDocument";
+import { IPasswordResetTokenDocument } from "../interfaces/IPasswordResetTokenDocument";
 
 interface Methods {
   compareToken(token: string): Promise<boolean>;
 }
 
-const authVerificationTokenSchema = new Schema<IAuthVerificationTokenDocument, {}, Methods>({
+const passwordResetTokenschema = new Schema<IPasswordResetTokenDocument, {}, Methods>({
   user_id: {
     type: Schema.Types.ObjectId,
     ref: "User",
@@ -18,12 +18,12 @@ const authVerificationTokenSchema = new Schema<IAuthVerificationTokenDocument, {
   },
   createdAt: {
     type: Date,
-    expires: 86400, // 60 * 60 * 24
+    expires: 3600, // 60 * 60
     default: Date.now(),
   },
 });
 
-authVerificationTokenSchema.pre("save", async function (next) {
+passwordResetTokenschema.pre("save", async function (next) {
   if (this.isModified("token")) {
     const salt = await genSalt(10);
     this.token = await hash(this.token, salt);
@@ -32,9 +32,9 @@ authVerificationTokenSchema.pre("save", async function (next) {
   next();
 });
 
-authVerificationTokenSchema.methods.compareToken = async function (token) {
+passwordResetTokenschema.methods.compareToken = async function (token) {
   return await compare(token, this.token);
 };
 
-const AuthVerificationTokenModel = model("AuthVerificationToken", authVerificationTokenSchema);
-export default AuthVerificationTokenModel;
+const PasswordResetTokenModel = model("PasswordResetToken", passwordResetTokenschema);
+export default PasswordResetTokenModel;

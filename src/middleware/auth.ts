@@ -4,6 +4,8 @@ import HttpCode from "../constants/httpCode";
 import jwt, { JsonWebTokenError, TokenExpiredError } from "jsonwebtoken";
 import UserModel from "../models/User";
 import { IUserProfile } from "../interfaces/IUserProfile";
+import "dotenv/config";
+import PasswordResetTokenModel from "../models/PasswordResetToken";
 
 declare global {
   namespace Express {
@@ -19,7 +21,9 @@ export const isAuth: RequestHandler = async (request, response, next) => {
     if (!authToken)
       throw new HttpError("Unauthorized request", HttpCode.FORBIDDEN);
     const token = authToken.split("Bearer ")[1];
-    const payload = jwt.verify(token, "secret") as { id: string };
+    const payload = jwt.verify(token, process.env.JWT_SECRET ?? "") as {
+      id: string;
+    };
 
     const user = await UserModel.findById(payload.id);
     if (!user) throw new HttpError("Unauthorized request", HttpCode.FORBIDDEN);
@@ -39,5 +43,34 @@ export const isAuth: RequestHandler = async (request, response, next) => {
       authError = new HttpError("Unauthorized access", HttpCode.UNAUTHORIZED);
     }
     return next(authError ? authError : error);
+  }
+};
+
+export const isValidPassResetToken: RequestHandler = async (req, res, next) => {
+  // Read token and id
+  const { id, token } = req.body;
+
+  try {
+    // Find token inside database with owner id.
+    const resetPassToken = await PasswordResetTokenModel.findOne({ user_id: id });
+    // If there is no token send error.
+    if (!resetPassToken)
+      throw new HttpError(
+        "Unauthorized request, invalid token",
+        HttpCode.FORBIDDEN
+      );
+    // Else compare token with encrypted value.
+    const matched = await resetPassToken.compareToken(token);
+    // If not matched send error.
+    if (!matched)
+      throw new HttpError(
+        "Unauthorized request, token doesn't match",
+        HttpCode.FORBIDDEN
+      );
+
+    next();
+  } catch (error) {
+    console.log(error);
+    return next(error);
   }
 };
