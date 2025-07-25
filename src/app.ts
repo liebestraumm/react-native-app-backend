@@ -6,6 +6,8 @@ import authRoutes from "./routes/authRoutes";
 import productRoutes from "./routes/productRoutes";
 
 const app = express();
+
+app.use(express.static("src/public"));
 app.use(express.json());
 
 // Routes

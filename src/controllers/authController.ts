@@ -8,6 +8,7 @@ import "dotenv/config";
 import nodemailer from "nodemailer";
 import { MailtrapTransport } from "mailtrap";
 import jwt from "jsonwebtoken";
+import Mail from "../lib/mail";
 
 export const createNewUser: RequestHandler = async (
   request,
@@ -38,28 +39,18 @@ export const createNewUser: RequestHandler = async (
     const link = `${process.env.VERIFICATION_LINK ?? ""}?id=${
       user._id
     }&token=${token}`;
-
-    const TOKEN = process.env.MAILTRAP_API_TOKEN ?? "";
-    const transport = nodemailer.createTransport(
-      MailtrapTransport({
-        token: TOKEN,
-      })
-    );
-
     const sender = {
-      address: "hello@demomailtrap.co",
+      address: "noreply@demomailtrap.co",
       name: "Mailtrap Test",
     };
     const recipients = [user.email];
-
-    await transport.sendMail({
-      from: sender,
-      to: recipients,
-      subject: "You are awesome!",
+    const mailBody = {
+      subject: "Verification Mail",
       html: `<p>Click <a href="${link}">here</a> to verify your email.</p>`,
       category: "Integration Test",
-    });
-
+    };
+    const verificationMail = new Mail(recipients, sender, mailBody);
+    verificationMail.send();
     // Send message back to check email inbox.
     response
       .status(201)
@@ -72,7 +63,7 @@ export const createNewUser: RequestHandler = async (
 
 export const verifyEmail: RequestHandler = async (request, response, next) => {
   // Read incoming data like: id and token
-  const { id, token } = request.query;
+  const { id, token } = request.body;
   try {
     // Find the token inside DB (using owner id). Send error if token not found.
     if (typeof token !== "string") {
@@ -81,7 +72,8 @@ export const verifyEmail: RequestHandler = async (request, response, next) => {
 
     // Check if the token is valid or not (because we have the encrypted value). If not valid send error otherwise update user is verified.
     const authToken = await AuthVerificationTokenModel.findOne({ user_id: id });
-    if (!authToken) throw new HttpError("Missing token", HttpCode.FORBIDDEN);
+    if (!authToken)
+      throw new HttpError("Unauthorized Request", HttpCode.FORBIDDEN);
     const isMatched = await authToken?.compareToken(token);
     if (!isMatched) throw new HttpError("Invalid token", HttpCode.BAD_REQUEST);
 
@@ -142,6 +134,45 @@ export const signIn: RequestHandler = async (request, response, next) => {
 
 export const sendProfile: RequestHandler = async (request, response, next) => {
   response.status(HttpCode.OK).json({
-    data: request.user
-  })
-}
+    data: request.user,
+  });
+};
+
+export const generateVerificationLink: RequestHandler = async (
+  request,
+  response,
+  next
+) => {
+  const { id, email } = request.user;
+  // Generate and Store verification token
+  const token = crypto.randomBytes(36).toString("hex");
+  try {
+    // Remove previous token if any
+    await AuthVerificationTokenModel.findOneAndDelete({ user_id: id });
+    // Create/store new token
+    await AuthVerificationTokenModel.create({
+      user_id: id,
+      token: token,
+    });
+    // Send link inside users email
+    const link = `${
+      process.env.VERIFICATION_LINK ?? ""
+    }?id=${id}&token=${token}`;
+    const sender = {
+      address: "noreply@demomailtrap.co",
+      name: "Mailtrap Test",
+    };
+    const recipients = [email];
+    const mailBody = {
+      subject: "Verification Link",
+      html: `<p>Click <a href="${link}">here</a> to verify your email.</p>`,
+      category: "Integration Test",
+    };
+    const verificationMail = new Mail(recipients, sender, mailBody);
+    verificationMail.send();
+    response.status(HttpCode.OK).json({ message: "Verification Link sent!" });
+  } catch (error) {
+    console.log(error);
+    return next(error);
+  }
+};

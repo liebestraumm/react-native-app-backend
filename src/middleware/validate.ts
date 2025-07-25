@@ -5,10 +5,9 @@ import { HttpError } from "../models/HttpError";
 
 const validate = (schema: yup.Schema): RequestHandler => {
   return async (request, _, next) => {
-    const requestData = request.body ?? request.query
     try {
       await schema.validate(
-        { ...requestData },
+        { ...request.body },
         { strict: true, abortEarly: true }
       );
       next();
