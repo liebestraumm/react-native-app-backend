@@ -107,7 +107,7 @@ export const signIn: RequestHandler = async (request, response, next) => {
     // Generate access & refresh token if pasword matches.
     const payload = { id: user._id };
     const accessToken = jwt.sign(payload, "secret", {
-      expiresIn: "15m",
+      expiresIn: "1m",
     });
     const refreshToken = jwt.sign(payload, "secret");
 
@@ -171,6 +171,56 @@ export const generateVerificationLink: RequestHandler = async (
     const verificationMail = new Mail(recipients, sender, mailBody);
     verificationMail.send();
     response.status(HttpCode.OK).json({ message: "Verification Link sent!" });
+  } catch (error) {
+    console.log(error);
+    return next(error);
+  }
+};
+
+export const refreshAccessToken: RequestHandler = async (
+  request,
+  response,
+  next
+) => {
+  // Read and verify refresh token
+  const { refreshToken } = request.body;
+  try {
+    if (!refreshToken)
+      throw new HttpError("Unauthorized request", HttpCode.FORBIDDEN);
+    const payload = jwt.verify(refreshToken, "secret") as { id: string };
+
+    if (!payload.id) throw new HttpError("Unauthorized request", HttpCode.UNAUTHORIZED)
+
+          // Find user with payload.id and refresh token
+    const user = await UserModel.findOne({
+      _id: payload.id,
+      tokens: refreshToken,
+    });
+    // If the refresh token is valid and no user found, refreshtoken is compromised and hence it can't be used to create another access token
+    if (!user) {
+      // User is compromised, remove all the previous tokens
+      const test = await UserModel.findByIdAndUpdate(payload.id, { tokens: [] });
+      console.log(test)
+      throw new HttpError("Unauthorized Request", HttpCode.UNAUTHORIZED);
+    }
+    // If the token is valid and user is found, create new refresh and access token
+    const refreshTokenPayload = { id: user._id };
+    const newAccessToken = jwt.sign(refreshTokenPayload, "secret", {
+      expiresIn: "1m",
+    });
+    const newRefreshToken = jwt.sign(refreshTokenPayload, "secret");
+
+    // Remove previous token, update user and send new tokens
+    user.tokens = user.tokens.filter((token) => token !== refreshToken);
+    user.tokens.push(newRefreshToken)
+    await user.save();
+    response.status(HttpCode.OK).json({
+      message: "Tokens updated!",
+      data: {
+        refresh: newRefreshToken,
+        access: newAccessToken,
+      },
+    });
   } catch (error) {
     console.log(error);
     return next(error);
