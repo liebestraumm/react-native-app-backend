@@ -4,6 +4,8 @@ import HttpCode from "./constants/httpCode";
 import "./db";
 import authRoutes from "./routes/authRoutes";
 import productRoutes from "./routes/productRoutes";
+import formidable from "formidable";
+import path from "path";
 
 const app = express();
 
@@ -15,10 +17,23 @@ app.use("/api/auth", authRoutes);
 app.use("/api/product", productRoutes);
 
 // Checks if the route exists. If not, it throws an error
-// app.use(() => {
-//   const error = new HttpError("Could not find this route", HttpCode.NOT_FOUND);
-//   throw error;
-// });
+app.use(() => {
+  const error = new HttpError("Could not find this route", HttpCode.NOT_FOUND);
+  throw error;
+});
+
+// Upload file functionality
+app.post("/upload-file", async (req, res) => {
+  const form = formidable({
+    uploadDir: path.join(__dirname, "public"),
+    filename(name, ext, part, form) {
+      return Date.now() + "_" + part.originalFilename;
+    },
+  });
+  await form.parse(req);
+
+  res.send("ok");
+});
 
 // NodeJS internal middleware that triggers when a HttpError object is thrown
 app.use(

@@ -5,5 +5,9 @@ export interface IUserDocument extends Document {
     password: string;
     name: string;
     verified: boolean,
-    tokens: Array<string>
+    tokens: Array<string>,
+    avatar?: {
+      id: string
+      url: string
+    }
   }

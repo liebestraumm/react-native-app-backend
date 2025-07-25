@@ -6,8 +6,10 @@ import {
   grantValid,
   refreshAccessToken,
   sendProfile,
+  sendPublicProfile,
   signIn,
   signOut,
+  updateAvatar,
   updatePassword,
   updateProfile,
   verifyEmail,
@@ -19,6 +21,7 @@ import {
   verifyTokenSchema,
 } from "../lib/validators";
 import { isAuth, isValidPassResetToken } from "../middleware/auth";
+import fileParser from "../middleware/fileParser";
 
 const authRoutes = Router();
 
@@ -43,5 +46,7 @@ authRoutes.post(
   isValidPassResetToken,
   updatePassword
 );
+authRoutes.get("/profile:id", isAuth, sendPublicProfile);
 authRoutes.put("/profile", isAuth, updateProfile);
+authRoutes.put("/update-avatar", isAuth, fileParser, updateAvatar);
 export default authRoutes;

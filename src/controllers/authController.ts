@@ -8,6 +8,19 @@ import "dotenv/config";
 import jwt from "jsonwebtoken";
 import Mail from "../lib/mail";
 import PasswordResetTokenModel from "../models/PasswordResetToken";
+import { v2 as cloudinary } from "cloudinary";
+import { isValidObjectId } from "mongoose";
+
+const CLOUD_NAME = process.env.CLOUD_NAME;
+const CLOUD_KEY = process.env.CLOUD_KEY;
+const CLOUD_SECRET = process.env.CLOUD_SECRET;
+
+cloudinary.config({
+  cloud_name: CLOUD_NAME,
+  api_key: CLOUD_KEY,
+  api_secret: CLOUD_SECRET,
+  secure: true,
+});
 
 export const createNewUser: RequestHandler = async (
   request,
@@ -340,7 +353,11 @@ export const updatePassword: RequestHandler = async (
   }
 };
 
-export const updateProfile: RequestHandler = async (request, response, next) => {
+export const updateProfile: RequestHandler = async (
+  request,
+  response,
+  next
+) => {
   const { name } = request.body;
   try {
     // Validate name
@@ -360,4 +377,78 @@ export const updateProfile: RequestHandler = async (request, response, next) => 
     console.log(error);
     return next(error);
   }
+};
+
+export const updateAvatar: RequestHandler = async (request, response, next) => {
+  /**
+1. User must be logged in.
+2. Read incoming file.
+3. File type must be image.
+4. Check if user already have avatar or not.
+5. If yes the remove the old avatar.
+6. Upload new avatar and update user.
+7. Send response back.
+  **/
+  const { avatar } = request.files;
+  try {
+    if (Array.isArray(avatar)) {
+      throw new HttpError(
+        "Multiple files are not allowed",
+        HttpCode.UNPROCESSABLE_ENTITY
+      );
+    }
+
+    if (!avatar.mimetype?.startsWith("image")) {
+      throw new HttpError("Invalid image file", HttpCode.UNPROCESSABLE_ENTITY);
+    }
+
+    const user = await UserModel.findById(request.user.id);
+    if (!user) {
+      throw new HttpError("user not found", HttpCode.UNPROCESSABLE_ENTITY);
+    }
+
+    if (user.avatar?.id) {
+      // remove avatar file
+      await cloudinary.uploader.destroy(user.avatar.id);
+    }
+
+    // upload avatar file, not locally but to the cloud using Cloudinary
+    const { secure_url: url, public_id: id } = await cloudinary.uploader.upload(
+      avatar.filepath,
+      {
+        width: 300,
+        height: 300,
+        crop: "thumb",
+        gravity: "face",
+      }
+    );
+    user.avatar = { url, id };
+    await user.save();
+
+    response.json({ profile: { ...request.user, avatar: user.avatar.url } });
+  } catch (error) {
+    console.log(error);
+    return next(error);
+  }
+};
+
+export const sendPublicProfile: RequestHandler = async (
+  request,
+  response,
+  next
+) => {
+  const profileId = request.params.id;
+  if (!isValidObjectId(profileId)) {
+    throw new HttpError("Invalid profile id!", HttpCode.UNPROCESSABLE_ENTITY);
+  }
+  try {
+    const user = await UserModel.findById(profileId);
+    if (!user) {
+      throw new HttpError("Profile not found!", HttpCode.NOT_FOUND);
+    }
+
+    response.json({
+      profile: { id: user._id, name: user.name, avatar: user.avatar?.url },
+    });
+  } catch (error) {}
 };

@@ -25,7 +25,12 @@ const userSchema = new Schema<IUserDocument, {}, Methods>(
       type: Boolean,
       default: false,
     },
-    tokens: [String]
+    tokens: [String],
+    avatar: {
+      type: Object,
+      url: String,
+      id: String,
+    },
   },
   {
     timestamps: true,
