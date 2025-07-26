@@ -2,5 +2,6 @@ export interface IUserProfile {
     id: unknown,
     name: string,
     email: string,
-    verified: boolean
+    verified: boolean,
+    avatar: string
 }

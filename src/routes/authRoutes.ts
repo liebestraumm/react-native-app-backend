@@ -46,7 +46,7 @@ authRoutes.post(
   isValidPassResetToken,
   updatePassword
 );
-authRoutes.get("/profile:id", isAuth, sendPublicProfile);
+authRoutes.get("/profile/:id", isAuth, sendPublicProfile);
 authRoutes.put("/profile", isAuth, updateProfile);
 authRoutes.put("/update-avatar", isAuth, fileParser, updateAvatar);
 export default authRoutes;

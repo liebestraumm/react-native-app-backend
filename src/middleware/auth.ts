@@ -33,6 +33,7 @@ export const isAuth: RequestHandler = async (request, response, next) => {
       name: user.name,
       email: user.email,
       verified: user.verified,
+      avatar: user.avatar?.url ?? ""
     };
     next();
   } catch (error) {
@@ -52,7 +53,9 @@ export const isValidPassResetToken: RequestHandler = async (req, res, next) => {
 
   try {
     // Find token inside database with owner id.
-    const resetPassToken = await PasswordResetTokenModel.findOne({ user_id: id });
+    const resetPassToken = await PasswordResetTokenModel.findOne({
+      user_id: id,
+    });
     // If there is no token send error.
     if (!resetPassToken)
       throw new HttpError(
