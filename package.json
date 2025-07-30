@@ -4,7 +4,7 @@
   "description": "Backend App Portfolio mde with NodeJS",
   "main": "app.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "jest",
     "build": "npx tsc",
     "dev": "ts-node-dev --respawn --transpile-only ./src/app.ts",
     "start": "node ./build/app.js"
@@ -34,7 +34,9 @@
     "@types/node": "^24.1.0",
     "@types/nodemailer": "^6.4.17",
     "@typescript-eslint/parser": "^8.38.0",
+    "jest": "^30.0.5",
     "sequelize-cli": "^6.6.3",
+    "ts-jest": "^29.4.0",
     "ts-node": "^10.9.2",
     "ts-node-dev": "^2.0.0",
     "typescript": "^5.8.3"
