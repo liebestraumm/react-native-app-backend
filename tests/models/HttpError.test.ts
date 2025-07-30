@@ -1,5 +1,5 @@
-import { HttpError } from '../../src/lib/HttpError';
-import HttpCode from '../../src/constants/httpCode';
+import { HttpError } from '../../api/lib/HttpError';
+import HttpCode from '../../api/constants/httpCode';
 
 describe('HttpError', () => {
   describe('constructor', () => {

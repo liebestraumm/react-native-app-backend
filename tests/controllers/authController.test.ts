@@ -1,14 +1,14 @@
 import { Request, Response, NextFunction } from 'express';
-import { createNewUser, verifyEmail } from '../../src/controllers/authController';
-import User from '../../src/models/User';
-import AuthVerificationToken from '../../src/models/AuthVerificationToken';
-import HttpCode from '../../src/constants/httpCode';
-import Mail from '../../src/lib/mail';
+import { createNewUser, verifyEmail } from '../../api/controllers/authController';
+import User from '../../api/models/User';
+import AuthVerificationToken from '../../api/models/AuthVerificationToken';
+import HttpCode from '../../api/constants/httpCode';
+import Mail from '../../api/lib/mail';
 
 // Mock dependencies
-jest.mock('../../src/models/User');
-jest.mock('../../src/models/AuthVerificationToken');
-jest.mock('../../src/lib/mail');
+jest.mock('../../api/models/User');
+jest.mock('../../api/models/AuthVerificationToken');
+jest.mock('../../api/lib/mail');
 jest.mock('crypto');
 jest.mock('dotenv/config');
 

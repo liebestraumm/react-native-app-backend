@@ -1,4 +1,4 @@
-import { newUserSchema, verifyTokenSchema, resetPassSchema } from '../../src/lib/validators';
+import { newUserSchema, verifyTokenSchema, resetPassSchema } from '../../api/lib/validators';
 
 describe('Validators', () => {
   describe('newUserSchema - Email Validation', () => {

@@ -1,15 +1,15 @@
 import { Request, Response, NextFunction } from 'express';
-import { listNewProduct } from '../../src/controllers/productController';
-import Product from '../../src/models/Product';
-import Asset from '../../src/models/Asset';
-import { HttpError } from '../../src/lib/HttpError';
-import HttpCode from '../../src/constants/httpCode';
-import cloudUploader from '../../src/cloud';
+import { listNewProduct } from '../../api/controllers/productController';
+import Product from '../../api/models/Product';
+import Asset from '../../api/models/Asset';
+import { HttpError } from '../../api/lib/HttpError';
+import HttpCode from '../../api/constants/httpCode';
+import cloudUploader from '../../api/cloud';
 
-// Mock dependencies
-jest.mock('../../src/models/Product');
-jest.mock('../../src/models/Asset');
-jest.mock('../../src/cloud');
+// Mock dependencies 
+jest.mock('../../api/models/Product');
+jest.mock('../../api/models/Asset');
+jest.mock('../../api/cloud');
 
 const mockProduct = Product as jest.Mocked<typeof Product>;
 const mockAsset = Asset as jest.Mocked<typeof Asset>;

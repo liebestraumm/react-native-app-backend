@@ -1,13 +1,13 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt, { JsonWebTokenError } from 'jsonwebtoken';
-import { isAuth } from '../../src/middleware/auth';
-import User from '../../src/models/User';
-import HttpCode from '../../src/constants/httpCode';
-import envs from '../../src/env';
+import { isAuth } from '../../api/middleware/auth';
+import User from '../../api/models/User';
+import HttpCode from '../../api/constants/httpCode';
+import envs from '../../api/env';
 
 // Mock dependencies
 jest.mock('jsonwebtoken');
-jest.mock('../../src/models/User');
+jest.mock('../../api/models/User');
 
 const mockJwt = jwt as jest.Mocked<typeof jwt>;
 const mockUser = User as jest.Mocked<typeof User>;

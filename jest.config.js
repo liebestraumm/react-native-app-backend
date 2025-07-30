@@ -10,10 +10,10 @@ module.exports = {
     '^.+\\.(ts|tsx)$': 'ts-jest',
   },
   collectCoverageFrom: [
-    'src/**/*.{ts,tsx}',
-    '!src/**/*.d.ts',
-    '!src/app.ts',
-    '!src/db/index.ts'
+    'api/**/*.{ts,tsx}',
+    '!api/**/*.d.ts',
+    '!api/app.ts',
+    '!api/db/index.ts'
   ],
   coverageDirectory: 'coverage',
   coverageReporters: ['text', 'lcov', 'html'],
