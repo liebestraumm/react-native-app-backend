@@ -3,13 +3,13 @@
     "target": "ES2020",
     "module": "commonjs",
     "outDir": "./build",
-    "rootDir": "./src",
+    "rootDir": "api",
     "strict": true,
     "esModuleInterop": true,
     "resolveJsonModule": true,
     "sourceMap": true,
     "skipLibCheck": true
   },
-  "include": ["src/**/*.ts", "models/index.ts"],
+  "include": ["api/**/*.ts", "models/index.ts"],
   "exclude": ["node_modules", "**/*.spec.ts"]
 }
