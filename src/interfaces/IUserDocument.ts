@@ -1,13 +1,14 @@
-import { Document } from "mongoose";
-
-export interface IUserDocument extends Document {
+export interface IUserDocument {
+    id: string;
     email: string;
     password: string;
     name: string;
-    verified: boolean,
-    tokens: Array<string>,
+    verified: boolean;
+    tokens: string[];
     avatar?: {
-      id: string
-      url: string
-    }
-  }
+      id: string;
+      url: string;
+    };
+    createdAt: Date;
+    updatedAt: Date;
+}

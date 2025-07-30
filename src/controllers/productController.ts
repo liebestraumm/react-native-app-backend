@@ -294,7 +294,7 @@ export const getProductDetail: RequestHandler = async (req, res, next) => {
         price: product.price,
         image: product.images?.map(({ url }) => url),
         seller: {
-          id: product.user_id._id,
+          id: product.user_id.toString(),
           name: product.user_id.name,
           avatar: product.user_id.avatar?.url,
         },

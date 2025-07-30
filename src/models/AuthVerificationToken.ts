@@ -1,40 +1,91 @@
-import { compare, genSalt, hash } from "bcrypt";
-import { Schema, model } from "mongoose";
-import { IAuthVerificationTokenDocument } from "../interfaces/IAuthVerificationTokenDocument";
+import { Model, DataTypes } from "sequelize";
+import { hash, compare, genSalt } from "bcrypt";
+import { sequelize } from "../db";
+import User from "./User";
 
-interface Methods {
-  compareToken(token: string): Promise<boolean>;
+export interface IAuthVerificationTokenAttributes {
+  id?: string;
+  user_id: string;
+  token: string;
+  createdAt?: Date;
+  updatedAt?: Date;
 }
 
-const authVerificationTokenSchema = new Schema<IAuthVerificationTokenDocument, {}, Methods>({
-  user_id: {
-    type: Schema.Types.ObjectId,
-    ref: "User",
-    required: true,
-  },
-  token: {
-    type: String,
-    required: true,
-  },
-  createdAt: {
-    type: Date,
-    expires: 86400, // 60 * 60 * 24
-    default: Date.now(),
-  },
-});
+export interface IAuthVerificationTokenInstance extends Model<IAuthVerificationTokenAttributes>, IAuthVerificationTokenAttributes {
+  compareToken: (token: string) => Promise<boolean>;
+}
 
-authVerificationTokenSchema.pre("save", async function (next) {
-  if (this.isModified("token")) {
-    const salt = await genSalt(10);
-    this.token = await hash(this.token, salt);
+class AuthVerificationToken extends Model<IAuthVerificationTokenAttributes, Omit<IAuthVerificationTokenAttributes, 'id'>> implements IAuthVerificationTokenAttributes {
+  public id!: string;
+  public user_id!: string;
+  public token!: string;
+  public readonly createdAt!: Date;
+  public readonly updatedAt!: Date;
+
+  public async compareToken(token: string): Promise<boolean> {
+    return await compare(token, this.token);
   }
+}
 
-  next();
+AuthVerificationToken.init(
+  {
+    id: {
+      type: DataTypes.UUID,
+      defaultValue: DataTypes.UUIDV4,
+      primaryKey: true,
+    },
+    user_id: {
+      type: DataTypes.UUID,
+      allowNull: false,
+      references: {
+        model: User,
+        key: 'id',
+      },
+      onDelete: 'CASCADE',
+      onUpdate: 'CASCADE',
+    },
+    token: {
+      type: DataTypes.STRING,
+      allowNull: false,
+    },
+  },
+  {
+    sequelize,
+    tableName: "auth_verification_tokens",
+    timestamps: true,
+    hooks: {
+      beforeSave: async (authToken: AuthVerificationToken) => {
+        if (authToken.changed("token")) {
+          const salt = await genSalt(10);
+          authToken.token = await hash(authToken.token, salt);
+        }
+      },
+    },
+    indexes: [
+      {
+        fields: ['createdAt'],
+      },
+    ],
+  }
+);
+
+// Define the association
+AuthVerificationToken.belongsTo(User, {
+  foreignKey: 'user_id',
+  as: 'user',
 });
 
-authVerificationTokenSchema.methods.compareToken = async function (token) {
-  return await compare(token, this.token);
+User.hasMany(AuthVerificationToken, {
+  foreignKey: 'user_id',
+  as: 'verificationTokens',
+});
+
+// Add associate method for better organization
+(AuthVerificationToken as any).associate = (models: any) => {
+  AuthVerificationToken.belongsTo(models.User, {
+    foreignKey: 'user_id',
+    as: 'user',
+  });
 };
 
-const AuthVerificationTokenModel = model("AuthVerificationToken", authVerificationTokenSchema);
-export default AuthVerificationTokenModel;
+export default AuthVerificationToken;

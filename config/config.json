@@ -1,0 +1,29 @@
+{
+  "development": {
+    "username": "neondb_owner",
+    "password": "npg_d9mlF6HLvIyC",
+    "database": "neondb",
+    "host": "ep-bitter-frost-a75cth4y-pooler.ap-southeast-2.aws.neon.tech",
+    "dialect": "postgres",
+    "dialectOptions": {
+      "ssl": {
+        "require": true,
+        "rejectUnauthorized": false
+      }
+    }
+  },
+  "test": {
+    "username": "root",
+    "password": null,
+    "database": "database_test",
+    "host": "127.0.0.1",
+    "dialect": "mysql"
+  },
+  "production": {
+    "username": "root",
+    "password": null,
+    "database": "database_production",
+    "host": "127.0.0.1",
+    "dialect": "mysql"
+  }
+}

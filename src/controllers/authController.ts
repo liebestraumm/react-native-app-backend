@@ -1,15 +1,15 @@
 import { RequestHandler } from "express";
-import UserModel from "../models/User";
+import User from "../models/User";
 import { HttpError } from "../models/HttpError";
 import HttpCode from "../constants/httpCode";
 import crypto from "crypto";
-import AuthVerificationTokenModel from "../models/AuthVerificationToken";
+import AuthVerificationToken from "../models/AuthVerificationToken";
 import "dotenv/config";
 import jwt from "jsonwebtoken";
 import Mail from "../lib/mail";
 import PasswordResetTokenModel from "../models/PasswordResetToken";
 import { v2 as cloudinary } from "cloudinary";
-import { isValidObjectId } from "mongoose";
+import { Op } from "sequelize";
 
 const CLOUD_NAME = process.env.CLOUD_NAME;
 const CLOUD_KEY = process.env.CLOUD_KEY;
@@ -31,25 +31,25 @@ export const createNewUser: RequestHandler = async (
   const { email, password, name } = request.body;
   try {
     // Check if user already exists
-    const existingUser = await UserModel.findOne({ email });
+    const existingUser = await User.findOne({ where: { email } });
     if (existingUser)
       throw new HttpError(
         "Unauthorized request, email is already in use!",
         HttpCode.UNAUTHORIZED
       );
 
-    const user = await UserModel.create({ name, email, password });
+    const user = await User.create({ name, email, password, verified: false, tokens: [] });
 
     // Generate and Store verification token
     const token = crypto.randomBytes(36).toString("hex");
-    await AuthVerificationTokenModel.create({
-      user_id: user._id,
+    await AuthVerificationToken.create({
+      user_id: user.id,
       token,
     });
 
     // Send verification link with token to register email.
     const link = `${process.env.VERIFICATION_LINK ?? ""}?id=${
-      user._id
+      user.id
     }&token=${token}`;
     const sender = process.env.MAILTRAP_SENDER ?? "";
     const recipients = [user.email];
@@ -80,15 +80,15 @@ export const verifyEmail: RequestHandler = async (request, response, next) => {
     }
 
     // Check if the token is valid or not (because we have the encrypted value). If not valid send error otherwise update user is verified.
-    const authToken = await AuthVerificationTokenModel.findOne({ user_id: id });
+    const authToken = await AuthVerificationToken.findOne({ where: { user_id: id } });
     if (!authToken)
       throw new HttpError("Unauthorized Request", HttpCode.FORBIDDEN);
     const isMatched = await authToken?.compareToken(token);
     if (!isMatched) throw new HttpError("Invalid token", HttpCode.BAD_REQUEST);
 
     // Remove token from database.
-    await UserModel.findByIdAndUpdate(id, { verified: true });
-    await AuthVerificationTokenModel.findByIdAndDelete(authToken._id);
+    await User.update({ verified: true }, { where: { id } });
+    await authToken.destroy();
 
     // Send success message.
     response
@@ -105,7 +105,7 @@ export const signIn: RequestHandler = async (request, response, next) => {
   const { email, password } = request.body;
   try {
     // Find user with the provided email. Send error if user not found.
-    const user = await UserModel.findOne({ email });
+    const user = await User.findOne({ where: { email } });
     if (!user)
       throw new HttpError("Email/Password mismatch", HttpCode.FORBIDDEN);
     // Check if the password is valid or not.
@@ -114,7 +114,7 @@ export const signIn: RequestHandler = async (request, response, next) => {
       throw new HttpError("Email/Password mismatch", HttpCode.FORBIDDEN);
 
     // Generate access & refresh token if pasword matches.
-    const payload = { id: user._id };
+    const payload = { id: user.id };
     const accessToken = jwt.sign(payload, process.env.JWT_SECRET ?? "", {
       expiresIn: "15m",
     });
@@ -129,7 +129,7 @@ export const signIn: RequestHandler = async (request, response, next) => {
       message: "You are signed in!",
       data: {
         profile: {
-          id: user._id,
+          id: user.id,
           email: user.email,
           name: user.name,
           verified: user.verified,
@@ -159,10 +159,10 @@ export const generateVerificationLink: RequestHandler = async (
   const token = crypto.randomBytes(36).toString("hex");
   try {
     // Remove previous token if any
-    await AuthVerificationTokenModel.findOneAndDelete({ user_id: id });
+    await AuthVerificationToken.destroy({ where: { user_id: id as string } });
     // Create/store new token
-    await AuthVerificationTokenModel.create({
-      user_id: id,
+    await AuthVerificationToken.create({
+      user_id: id as string,
       token: token,
     });
     // Send link inside users email
@@ -203,21 +203,21 @@ export const refreshAccessToken: RequestHandler = async (
       throw new HttpError("Unauthorized request", HttpCode.UNAUTHORIZED);
 
     // Find user with payload.id and refresh token
-    const user = await UserModel.findOne({
-      _id: payload.id,
-      tokens: refreshToken,
+    const user = await User.findOne({
+      where: {
+        id: payload.id as string,
+        tokens: { [Op.contains]: [refreshToken] }
+      }
     });
     // If the refresh token is valid and no user found, refreshtoken is compromised and hence it can't be used to create another access token
     if (!user) {
       // User is compromised, remove all the previous tokens
-      const test = await UserModel.findByIdAndUpdate(payload.id, {
-        tokens: [],
-      });
+      const test = await User.update({ tokens: [] }, { where: { id: payload.id } });
       console.log(test);
       throw new HttpError("Unauthorized Request", HttpCode.UNAUTHORIZED);
     }
     // If the token is valid and user is found, create new refresh and access token
-    const refreshTokenPayload = { id: user._id };
+    const refreshTokenPayload = { id: user.id };
     const newAccessToken = jwt.sign(
       refreshTokenPayload,
       process.env.JWT_SECRET ?? "",
@@ -251,9 +251,11 @@ export const signOut: RequestHandler = async (request, response, next) => {
   const { refreshToken } = request.body;
   try {
     // Remove the refresh token
-    const user = await UserModel.findOne({
-      _id: request.user.id,
-      tokens: refreshToken,
+    const user = await User.findOne({
+      where: {
+        id: request.user.id as string,
+        tokens: { [Op.contains]: [refreshToken] }
+      }
     });
     if (!user)
       throw new HttpError(
@@ -279,18 +281,18 @@ export const generateForgetPasswordLink: RequestHandler = async (
   const { email } = request.body;
   try {
     // Find users with the given email and send error if there is no user
-    const user = await UserModel.findOne({ email });
+    const user = await User.findOne({ where: { email } });
     if (!user) throw new HttpError("Account not found", HttpCode.NOT_FOUND);
 
     // Remove token
-    await PasswordResetTokenModel.findOneAndDelete({ user_id: user._id });
+    await PasswordResetTokenModel.findOneAndDelete({ user_id: user.id });
 
     // Create new token
     const token = crypto.randomBytes(36).toString("hex");
-    await PasswordResetTokenModel.create({ user_id: user._id, token });
+    await PasswordResetTokenModel.create({ user_id: user.id, token });
 
     // Send the link to user's email
-    const passResetLink = `${process.env.PASSWORD_RESET_LINK}?id=${user._id}&token=${token}`;
+    const passResetLink = `${process.env.PASSWORD_RESET_LINK}?id=${user.id}&token=${token}`;
     const recipients = [user.email];
     const sender = "security@myapp.com";
     const mailBody = {
@@ -320,7 +322,7 @@ export const updatePassword: RequestHandler = async (
   const { id, password } = request.body;
   try {
     // If valid find user with the given id.
-    const user = await UserModel.findById(id);
+    const user = await User.findByPk(id);
     if (!user) throw new HttpError("Unauthorized access", HttpCode.FORBIDDEN);
     // Check if user is using same password.
     const matched = await user.comparePassword(password);
@@ -335,7 +337,7 @@ export const updatePassword: RequestHandler = async (
     await user.save();
 
     // Remove password reset token.
-    await PasswordResetTokenModel.findOneAndDelete({ owner: user._id });
+    await PasswordResetTokenModel.findOneAndDelete({ owner: user.id });
 
     // Send confirmation email.
     const recipients = [user.email];
@@ -366,7 +368,7 @@ export const updateProfile: RequestHandler = async (
     if (typeof name !== "string" || name.trim().length < 3)
       throw new HttpError("Invalid name", HttpCode.UNPROCESSABLE_ENTITY);
     // Find user and update the name
-    await UserModel.findByIdAndUpdate(request.user.id, { name });
+    await User.update({ name }, { where: { id: request.user.id as string } });
     // Send the new profile back
     response.json({
       message: "Profile updated!",
@@ -404,7 +406,7 @@ export const updateAvatar: RequestHandler = async (request, response, next) => {
       throw new HttpError("Invalid image file", HttpCode.UNPROCESSABLE_ENTITY);
     }
 
-    const user = await UserModel.findById(request.user.id);
+    const user = await User.findByPk(request.user.id as string);
     if (!user) {
       throw new HttpError("user not found", HttpCode.UNPROCESSABLE_ENTITY);
     }
@@ -440,17 +442,17 @@ export const sendPublicProfile: RequestHandler = async (
   next
 ) => {
   const profileId = request.params.id;
-  if (!isValidObjectId(profileId)) {
-    throw new HttpError("Invalid profile id!", HttpCode.UNPROCESSABLE_ENTITY);
-  }
   try {
-    const user = await UserModel.findById(profileId);
+    const user = await User.findByPk(profileId);
     if (!user) {
       throw new HttpError("Profile not found!", HttpCode.NOT_FOUND);
     }
 
     response.json({
-      profile: { id: user._id, name: user.name, avatar: user.avatar?.url },
+      profile: { id: user.id, name: user.name, avatar: user.avatar?.url },
     });
-  } catch (error) {}
+  } catch (error) {
+    console.log(error);
+    return next(error);
+  }
 };

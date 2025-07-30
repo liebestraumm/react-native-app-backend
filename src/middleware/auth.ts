@@ -25,11 +25,11 @@ export const isAuth: RequestHandler = async (request, response, next) => {
       id: string;
     };
 
-    const user = await UserModel.findById(payload.id);
+    const user = await UserModel.findByPk(payload.id);
     if (!user) throw new HttpError("Unauthorized request", HttpCode.FORBIDDEN);
 
     request.user = {
-      id: user._id,
+      id: user.id,
       name: user.name,
       email: user.email,
       verified: user.verified,

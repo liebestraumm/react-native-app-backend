@@ -1,74 +1,94 @@
-import { model, Schema } from "mongoose";
+import { Model, DataTypes } from "sequelize";
 import { hash, compare, genSalt } from "bcrypt";
-import { IUserDocument } from "../interfaces/IUserDocument";
+import { sequelize } from "../db";
 
-interface Methods {
-  comparePassword: (password: string) => Promise<boolean>;
+export interface IUserAttributes {
+  id?: string;
+  email: string;
+  password: string;
+  name: string;
+  verified: boolean;
+  tokens: string[];
+  avatar?: {
+    id: string;
+    url: string;
+  };
+  createdAt?: Date;
+  updatedAt?: Date;
 }
 
-const userSchema = new Schema<IUserDocument, {}, Methods>(
+export interface IUserInstance extends Model<IUserAttributes>, IUserAttributes {
+  comparePassword: (password: string) => Promise<boolean>;
+  verificationTokens?: any[];
+}
+
+class User extends Model<IUserAttributes, Omit<IUserAttributes, 'id'>> implements IUserAttributes {
+  public id!: string;
+  public email!: string;
+  public password!: string;
+  public name!: string;
+  public verified!: boolean;
+  public tokens!: string[];
+  public avatar?: {
+    id: string;
+    url: string;
+  };
+  public readonly createdAt!: Date;
+  public readonly updatedAt!: Date;
+
+  public async comparePassword(password: string): Promise<boolean> {
+    return await compare(password, this.password);
+  }
+}
+
+User.init(
   {
+    id: {
+      type: DataTypes.UUID,
+      defaultValue: DataTypes.UUIDV4,
+      primaryKey: true,
+    },
     email: {
-      type: String,
+      type: DataTypes.STRING,
       unique: true,
-      required: true,
+      allowNull: false,
+      validate: {
+        isEmail: true,
+      },
     },
     password: {
-      type: String,
-      required: true,
+      type: DataTypes.STRING,
+      allowNull: false,
     },
     name: {
-      type: String,
-      required: true,
+      type: DataTypes.STRING,
+      allowNull: false,
     },
     verified: {
-      type: Boolean,
-      default: false,
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
     },
-    tokens: [String],
+    tokens: {
+      type: DataTypes.ARRAY(DataTypes.STRING),
+      defaultValue: [],
+    },
     avatar: {
-      type: Object,
-      url: String,
-      id: String,
+      type: DataTypes.JSON,
+      allowNull: true,
     },
   },
   {
-    timestamps: true,
+    sequelize,
+    tableName: "users",
+    hooks: {
+      beforeSave: async (user: User) => {
+        if (user.changed("password")) {
+          const salt = await genSalt(10);
+          user.password = await hash(user.password, salt);
+        }
+      },
+    },
   }
 );
 
-// userSchema.pre("save", async (next) => {
-//   (async (doc: UserDocument) => {
-//     try {
-//       // 'this' refers to the document being saved
-//       if (doc.isModified("password")) {
-//         const salt = await genSalt(10);
-//         doc.password = await hash(doc.password, salt);
-//       }
-//       return next();
-//     } catch (error) {
-//       return next(error as Error);
-//     }
-//   })(userSchema);
-//   next();
-// });
-
-userSchema.pre("save", async function (next) {
-  if (this.isModified("password")) {
-    const salt = await genSalt(10);
-    this.password = await hash(this.password, salt);
-  }
-
-  next();
-});
-
-// userSchema.methods.comparePassword = async function (password: string) {
-//   return await compare(password, this.password);
-// };
-
-userSchema.methods.comparePassword = async function (password) {
-  return await compare(password, this.password);
-};
-
-const UserModel = model("User", userSchema);
-export default UserModel;
+export default User;
