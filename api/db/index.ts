@@ -1,4 +1,5 @@
 import { Sequelize } from "sequelize";
+import pg from "pg";
 import config from "../sequelize.config";
 
 let sequelize: Sequelize;
@@ -12,6 +13,7 @@ sequelize = new Sequelize(
   {
     host: dbConfig.host,
     dialect: dbConfig.dialect,
+    dialectModule: pg,
     dialectOptions: dbConfig.dialectOptions,
     logging: false,
   }
