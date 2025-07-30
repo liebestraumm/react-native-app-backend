@@ -61,11 +61,7 @@ AuthVerificationToken.init(
         }
       },
     },
-    indexes: [
-      {
-        fields: ['createdAt'],
-      },
-    ],
+    // Indexes are handled in migrations
   }
 );
 

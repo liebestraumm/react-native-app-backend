@@ -9,7 +9,7 @@ module.exports = {
      * Example:
      * await queryInterface.createTable('users', { id: Sequelize.INTEGER });
      */
-    await queryInterface.createTable("auth_verification_tokens", {
+    await queryInterface.createTable("password_reset_tokens", {
       id: {
         type: Sequelize.UUID,
         defaultValue: Sequelize.UUIDV4,
@@ -40,11 +40,11 @@ module.exports = {
     });
 
     // Add indexes with custom names to avoid conflicts
-    await queryInterface.addIndex("auth_verification_tokens", ["user_id"], {
-      name: "auth_verification_tokens_user_id_idx"
+    await queryInterface.addIndex("password_reset_tokens", ["user_id"], {
+      name: "password_reset_tokens_user_id_idx"
     });
-    await queryInterface.addIndex("auth_verification_tokens", ["createdAt"], {
-      name: "auth_verification_tokens_created_at_idx"
+    await queryInterface.addIndex("password_reset_tokens", ["createdAt"], {
+      name: "password_reset_tokens_created_at_idx"
     });
   },
 
@@ -56,9 +56,9 @@ module.exports = {
      * await queryInterface.dropTable('users');
      */
     // Remove indexes first
-    await queryInterface.removeIndex("auth_verification_tokens", "auth_verification_tokens_user_id_idx");
-    await queryInterface.removeIndex("auth_verification_tokens", "auth_verification_tokens_created_at_idx");
+    await queryInterface.removeIndex("password_reset_tokens", "password_reset_tokens_user_id_idx");
+    await queryInterface.removeIndex("password_reset_tokens", "password_reset_tokens_created_at_idx");
     // Then drop the table
-    await queryInterface.dropTable("auth_verification_tokens");
+    await queryInterface.dropTable("password_reset_tokens");
   },
 }; 

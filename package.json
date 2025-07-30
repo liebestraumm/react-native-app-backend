@@ -19,7 +19,6 @@
     "express": "^5.1.0",
     "formidable": "^3.5.4",
     "jsonwebtoken": "^9.0.2",
-    "mongoose": "^8.16.4",
     "nodemailer": "^6.9.4",
     "pg": "^8.16.3",
     "pg-hstore": "^2.3.4",

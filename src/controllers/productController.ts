@@ -1,12 +1,11 @@
 import { RequestHandler } from "express";
 import HttpCode from "../constants/httpCode";
 import { HttpError } from "../models/HttpError";
-import ProductModel from "../models/Product";
+import Product from "../models/Product";
 import { UploadApiResponse } from "cloudinary";
 import cloudUploader, { cloudApi } from "../cloud";
 import categories from "../lib/categories";
-import { isValidObjectId } from "mongoose";
-import { IUserDocument } from "../interfaces/IUserDocument";
+import User from "../models/User";
 
 const uploadImage = (filePath: string): Promise<UploadApiResponse> => {
   return cloudUploader.upload(filePath, {
@@ -22,9 +21,9 @@ export const listNewProduct: RequestHandler = async (
   next
 ) => {
   const { name, price, category, description, purchasingDate } = request.body;
-  // Instead of using the create function, do this and then use the save method, which is the same:
-  const newProduct = new ProductModel({
-    user_id: request.user.id,
+  // Create product with Sequelize
+  const newProduct = await Product.create({
+    user_id: request.user.id as string,
     name,
     price,
     category,
@@ -67,61 +66,63 @@ export const listNewProduct: RequestHandler = async (
     );
   try {
     // FILE UPLOAD
+    let productImages: any[] = [];
+    let productThumbnail: string | undefined;
+
     if (isMultipleImages) {
       const uploadPromise = images.map((file) => uploadImage(file.filepath));
       // Wait for all file uploads to complete
       const uploadResults = await Promise.all(uploadPromise);
       // Add the image URLs and public IDs to the product's images field
-      newProduct.images = uploadResults.map(({ secure_url, public_id }) => {
+      productImages = uploadResults.map(({ secure_url, public_id }) => {
         return { url: secure_url, id: public_id };
       });
 
-      newProduct.thumbnail = newProduct.images[0].url;
+      productThumbnail = productImages[0].url;
     } else {
       if (images) {
         const { secure_url, public_id } = await uploadImage(images.filepath);
-        newProduct.images = [{ url: secure_url, id: public_id }];
-        newProduct.thumbnail = secure_url;
+        productImages = [{ url: secure_url, id: public_id }];
+        productThumbnail = secure_url;
       }
     }
 
-    await newProduct.save();
+    // Update the product with images
+    await newProduct.update({
+      images: productImages,
+      thumbnail: productThumbnail,
+    });
 
-    response.status(201).json({ message: "Added new product!" });
+    response.status(201).json({ message: "New product added!" });
   } catch (error) {
-    return next(error)
+    return next(error);
   }
 };
 
 export const updateProduct: RequestHandler = async (req, res, next) => {
-  /*
-User must be authenticated.
-User can upload images as well.
-Validate incoming data.
-Update normal properties (if the product is made by the same user).
-Upload and update images (restrict image qty).
-And send the response back.
-    */
   const { name, price, category, description, purchasingDate, thumbnail } =
     req.body;
   const productId = req.params.id;
-  if (!isValidObjectId(productId))
+  // Validate UUID format
+  const uuidRegex =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  if (!uuidRegex.test(productId))
     throw new HttpError("Invalid product Id", HttpCode.UNPROCESSABLE_ENTITY);
   try {
-    const product = await ProductModel.findOneAndUpdate(
-      { _id: productId, owner: req.user.id },
-      {
-        name,
-        price,
-        category,
-        description,
-        purchasingDate,
-      },
-      {
-        new: true,
-      }
-    );
+    const product = await Product.findOne({
+      where: { id: productId, user_id: req.user.id as string },
+    });
+
     if (!product) throw new HttpError("Product Not Found", HttpCode.NOT_FOUND);
+
+    // Update the product
+    await product.update({
+      name,
+      price,
+      category,
+      description,
+      purchasingDate,
+    });
 
     if (typeof thumbnail === "string") product.thumbnail = thumbnail;
 
@@ -172,18 +173,20 @@ And send the response back.
         return { url: secure_url, id: public_id };
       });
 
-      if (product.images) product.images.push(...newImages);
-      else product.images = newImages;
+      const currentImages = product.images || [];
+      const updatedImages = [...currentImages, ...newImages];
+      await product.update({ images: updatedImages });
     } else {
       if (images) {
         const { secure_url, public_id } = await uploadImage(images.filepath);
-        if (product.images)
-          product.images.push({ url: secure_url, id: public_id });
-        else product.images = [{ url: secure_url, id: public_id }];
+        const currentImages = product.images || [];
+        const updatedImages = [
+          ...currentImages,
+          { url: secure_url, id: public_id },
+        ];
+        await product.update({ images: updatedImages });
       }
     }
-
-    await product.save();
 
     res.status(201).json({ message: "Product updated successfully." });
   } catch (error) {
@@ -192,24 +195,22 @@ And send the response back.
 };
 
 export const deleteProduct: RequestHandler = async (req, res, next) => {
-  /*
-User must be authenticated.
-Validate the product id.
-Remove if it is made by the same user.
-Remove images as well.
-And send the response back.
-    */
   try {
     const productId = req.params.id;
-    if (!isValidObjectId(productId))
+    // Validate UUID format
+    const uuidRegex =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(productId))
       throw new HttpError("Invalid product Id", HttpCode.UNPROCESSABLE_ENTITY);
 
-    const product = await ProductModel.findOneAndDelete({
-      _id: productId,
-      owner: req.user.id,
+    const product = await Product.findOne({
+      where: { id: productId, user_id: req.user.id as string },
     });
 
     if (!product) throw new HttpError("Product not found", HttpCode.NOT_FOUND);
+
+    // Delete the product
+    await product.destroy();
 
     const images = product.images || [];
     if (images.length) {
@@ -224,35 +225,32 @@ And send the response back.
 };
 
 export const deleteProductImage: RequestHandler = async (req, res, next) => {
-  /*
-1. User must be authenticated.
-2. Validate the product id.
-3. Remove the image from db (if it is made by the same user).
-4. Remove from cloud as well.
-5. And send the response back.
-    */
   try {
     const { productId, imageId } = req.params;
-    if (!isValidObjectId(productId))
+    // Validate UUID format
+    const uuidRegex =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(productId))
       throw new HttpError("Invalid product Id", HttpCode.UNPROCESSABLE_ENTITY);
 
-    const product = await ProductModel.findOneAndUpdate(
-      { _id: productId, owner: req.user.id },
-      {
-        $pull: {
-          images: { id: imageId },
-        },
-      },
-      { new: true }
-    );
+    const product = await Product.findOne({
+      where: { id: productId, user_id: req.user.id as string },
+    });
 
     if (!product) throw new HttpError("Product not found", HttpCode.NOT_FOUND);
 
+    // Remove the image from the images array
+    const currentImages = product.images || [];
+    const updatedImages = currentImages.filter((img) => img.id !== imageId);
+    await product.update({ images: updatedImages });
+
     if (product.thumbnail?.includes(imageId)) {
-      const images = product.images;
-      if (images) product.thumbnail = images[0].url;
-      else product.thumbnail = "";
-      await product.save();
+      const images = updatedImages;
+      if (images.length > 0) {
+        await product.update({ thumbnail: images[0].url });
+      } else {
+        await product.update({ thumbnail: "" });
+      }
     }
 
     // removing from cloud storage
@@ -265,27 +263,28 @@ export const deleteProductImage: RequestHandler = async (req, res, next) => {
 };
 
 export const getProductDetail: RequestHandler = async (req, res, next) => {
-  /*
-1. User must be authenticated (optional).
-2. Validate the product id.
-3. Find Product by the id.
-4. Format data.
-5. And send the response back.
-
-    */
   try {
     const { id } = req.params;
-    if (!isValidObjectId(id))
+    // Validate UUID format
+    const uuidRegex =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(id))
       throw new HttpError("Invalid product Id!", HttpCode.UNPROCESSABLE_ENTITY);
 
-    const product = await ProductModel.findById(id).populate<{
-      user_id: IUserDocument;
-    }>("owner");
+    const product = await Product.findByPk(id, {
+      include: [
+        {
+          model: User,
+          as: "owner",
+          attributes: ["id", "name", "avatar"],
+        },
+      ],
+    });
     if (!product) throw new HttpError("Product Not Found!", HttpCode.NOT_FOUND);
-
+    const user = await User.findByPk(product.user_id);
     res.json({
       product: {
-        id: product._id,
+        id: product.id,
         name: product.name,
         description: product.description,
         thumbnail: product.thumbnail,
@@ -293,11 +292,7 @@ export const getProductDetail: RequestHandler = async (req, res, next) => {
         date: product.purchasingDate,
         price: product.price,
         image: product.images?.map(({ url }) => url),
-        seller: {
-          id: product.user_id.toString(),
-          name: product.user_id.name,
-          avatar: product.user_id.avatar?.url,
-        },
+        seller: { ...user },
       },
     });
   } catch (error) {
@@ -306,13 +301,6 @@ export const getProductDetail: RequestHandler = async (req, res, next) => {
 };
 
 export const getProductsByCategory: RequestHandler = async (req, res, next) => {
-  /*
-1. User must be authenticated (optional).
-2. Validate the category.
-3. Find products by category (apply pagination if needed).
-4. Format data.
-5. And send the response back.
-    */
   try {
     const { category } = req.params;
     const { pageNo = "1", limit = "10" } = req.query as {
@@ -322,14 +310,16 @@ export const getProductsByCategory: RequestHandler = async (req, res, next) => {
     if (!categories.includes(category))
       throw new HttpError("Invalid category!", HttpCode.UNPROCESSABLE_ENTITY);
 
-    const products = await ProductModel.find({ category })
-      .sort("-createdAt")
-      .skip((+pageNo - 1) * +limit)
-      .limit(+limit);
+    const products = await Product.findAll({
+      where: { category },
+      order: [["createdAt", "DESC"]],
+      offset: (+pageNo - 1) * +limit,
+      limit: +limit,
+    });
 
     const listings = products.map((p) => {
       return {
-        id: p._id,
+        id: p.id,
         name: p.name,
         thumbnail: p.thumbnail,
         category: p.category,
@@ -344,18 +334,15 @@ export const getProductsByCategory: RequestHandler = async (req, res, next) => {
 };
 
 export const getLatestProducts: RequestHandler = async (req, res, next) => {
-  /*
-1. User must be authenticated (optional).
-2. Find all the products with sorted date (apply limit/pagination if needed).
-3. Format data.
-4. And send the response back.
-    */
   try {
-    const products = await ProductModel.find().sort("-createdAt").limit(10);
+    const products = await Product.findAll({
+      order: [["createdAt", "DESC"]],
+      limit: 10,
+    });
 
     const listings = products.map((p) => {
       return {
-        id: p._id,
+        id: p.id,
         name: p.name,
         thumbnail: p.thumbnail,
         category: p.category,
@@ -370,26 +357,21 @@ export const getLatestProducts: RequestHandler = async (req, res, next) => {
 };
 
 export const getListings: RequestHandler = async (req, res, next) => {
-  /*
-1. User must be authenticated.
-2. Find all the products created by this user (apply pagination if needed).
-3. Format data.
-4. And send the response back.
-    */
-
   const { pageNo = "1", limit = "10" } = req.query as {
     pageNo: string;
     limit: string;
   };
   try {
-    const products = await ProductModel.find({ owner: req.user.id })
-      .sort("-createdAt")
-      .skip((+pageNo - 1) * +limit)
-      .limit(+limit);
+    const products = await Product.findAll({
+      where: { user_id: req.user.id as string },
+      order: [["createdAt", "DESC"]],
+      offset: (+pageNo - 1) * +limit,
+      limit: +limit,
+    });
 
     const listings = products.map((p) => {
       return {
-        id: p._id,
+        id: p.id,
         name: p.name,
         thumbnail: p.thumbnail,
         category: p.category,

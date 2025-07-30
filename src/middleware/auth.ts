@@ -5,7 +5,7 @@ import jwt, { JsonWebTokenError, TokenExpiredError } from "jsonwebtoken";
 import UserModel from "../models/User";
 import { IUserProfile } from "../interfaces/IUserProfile";
 import "dotenv/config";
-import PasswordResetTokenModel from "../models/PasswordResetToken";
+import PasswordResetToken from "../models/PasswordResetToken";
 
 declare global {
   namespace Express {
@@ -53,8 +53,8 @@ export const isValidPassResetToken: RequestHandler = async (req, res, next) => {
 
   try {
     // Find token inside database with owner id.
-    const resetPassToken = await PasswordResetTokenModel.findOne({
-      user_id: id,
+    const resetPassToken = await PasswordResetToken.findOne({
+      where: { user_id: id },
     });
     // If there is no token send error.
     if (!resetPassToken)

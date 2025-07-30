@@ -20,6 +20,8 @@ export interface IUserAttributes {
 export interface IUserInstance extends Model<IUserAttributes>, IUserAttributes {
   comparePassword: (password: string) => Promise<boolean>;
   verificationTokens?: any[];
+  passwordResetTokens?: any[];
+  products?: any[];
 }
 
 class User extends Model<IUserAttributes, Omit<IUserAttributes, 'id'>> implements IUserAttributes {

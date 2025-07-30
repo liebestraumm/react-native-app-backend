@@ -7,7 +7,7 @@ import AuthVerificationToken from "../models/AuthVerificationToken";
 import "dotenv/config";
 import jwt from "jsonwebtoken";
 import Mail from "../lib/mail";
-import PasswordResetTokenModel from "../models/PasswordResetToken";
+import PasswordResetToken from "../models/PasswordResetToken";
 import { v2 as cloudinary } from "cloudinary";
 import { Op } from "sequelize";
 
@@ -38,7 +38,13 @@ export const createNewUser: RequestHandler = async (
         HttpCode.UNAUTHORIZED
       );
 
-    const user = await User.create({ name, email, password, verified: false, tokens: [] });
+    const user = await User.create({
+      name,
+      email,
+      password,
+      verified: false,
+      tokens: [],
+    });
 
     // Generate and Store verification token
     const token = crypto.randomBytes(36).toString("hex");
@@ -80,7 +86,9 @@ export const verifyEmail: RequestHandler = async (request, response, next) => {
     }
 
     // Check if the token is valid or not (because we have the encrypted value). If not valid send error otherwise update user is verified.
-    const authToken = await AuthVerificationToken.findOne({ where: { user_id: id } });
+    const authToken = await AuthVerificationToken.findOne({
+      where: { user_id: id },
+    });
     if (!authToken)
       throw new HttpError("Unauthorized Request", HttpCode.FORBIDDEN);
     const isMatched = await authToken?.compareToken(token);
@@ -127,15 +135,13 @@ export const signIn: RequestHandler = async (request, response, next) => {
 
     response.status(HttpCode.OK).json({
       message: "You are signed in!",
-      data: {
-        profile: {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          verified: user.verified,
-        },
-        tokens: { refresh: refreshToken, access: accessToken },
+      profile: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        verified: user.verified,
       },
+      tokens: { refresh: refreshToken, access: accessToken },
     });
   } catch (error) {
     console.log(error);
@@ -145,7 +151,7 @@ export const signIn: RequestHandler = async (request, response, next) => {
 
 export const sendProfile: RequestHandler = async (request, response, next) => {
   response.status(HttpCode.OK).json({
-    data: request.user,
+    profile: request.user,
   });
 };
 
@@ -206,13 +212,16 @@ export const refreshAccessToken: RequestHandler = async (
     const user = await User.findOne({
       where: {
         id: payload.id as string,
-        tokens: { [Op.contains]: [refreshToken] }
-      }
+        tokens: { [Op.contains]: [refreshToken] },
+      },
     });
     // If the refresh token is valid and no user found, refreshtoken is compromised and hence it can't be used to create another access token
     if (!user) {
       // User is compromised, remove all the previous tokens
-      const test = await User.update({ tokens: [] }, { where: { id: payload.id } });
+      const test = await User.update(
+        { tokens: [] },
+        { where: { id: payload.id } }
+      );
       console.log(test);
       throw new HttpError("Unauthorized Request", HttpCode.UNAUTHORIZED);
     }
@@ -236,7 +245,14 @@ export const refreshAccessToken: RequestHandler = async (
     await user.save();
     response.status(HttpCode.OK).json({
       message: "Tokens updated!",
-      data: {
+      profile: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        verified: user.verified,
+        avatar: user.avatar?.url,
+      },
+      tokens: {
         refresh: newRefreshToken,
         access: newAccessToken,
       },
@@ -254,8 +270,8 @@ export const signOut: RequestHandler = async (request, response, next) => {
     const user = await User.findOne({
       where: {
         id: request.user.id as string,
-        tokens: { [Op.contains]: [refreshToken] }
-      }
+        tokens: { [Op.contains]: [refreshToken] },
+      },
     });
     if (!user)
       throw new HttpError(
@@ -285,11 +301,11 @@ export const generateForgetPasswordLink: RequestHandler = async (
     if (!user) throw new HttpError("Account not found", HttpCode.NOT_FOUND);
 
     // Remove token
-    await PasswordResetTokenModel.findOneAndDelete({ user_id: user.id });
+    await PasswordResetToken.destroy({ where: { user_id: user.id } });
 
     // Create new token
     const token = crypto.randomBytes(36).toString("hex");
-    await PasswordResetTokenModel.create({ user_id: user.id, token });
+    await PasswordResetToken.create({ user_id: user.id, token });
 
     // Send the link to user's email
     const passResetLink = `${process.env.PASSWORD_RESET_LINK}?id=${user.id}&token=${token}`;
@@ -337,7 +353,7 @@ export const updatePassword: RequestHandler = async (
     await user.save();
 
     // Remove password reset token.
-    await PasswordResetTokenModel.findOneAndDelete({ owner: user.id });
+    await PasswordResetToken.destroy({ where: { user_id: user.id } });
 
     // Send confirmation email.
     const recipients = [user.email];
@@ -384,15 +400,6 @@ export const updateProfile: RequestHandler = async (
 };
 
 export const updateAvatar: RequestHandler = async (request, response, next) => {
-  /**
-1. User must be logged in.
-2. Read incoming file.
-3. File type must be image.
-4. Check if user already have avatar or not.
-5. If yes the remove the old avatar.
-6. Upload new avatar and update user.
-7. Send response back.
-  **/
   const { avatar } = request.files;
   try {
     if (Array.isArray(avatar)) {

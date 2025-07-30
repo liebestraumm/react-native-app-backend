@@ -1,40 +1,87 @@
-import { compare, genSalt, hash } from "bcrypt";
-import { Schema, model } from "mongoose";
-import { IPasswordResetTokenDocument } from "../interfaces/IPasswordResetTokenDocument";
+import { Model, DataTypes } from "sequelize";
+import { hash, compare, genSalt } from "bcrypt";
+import { sequelize } from "../db";
+import User from "./User";
 
-interface Methods {
-  compareToken(token: string): Promise<boolean>;
+export interface IPasswordResetTokenAttributes {
+  id?: string;
+  user_id: string;
+  token: string;
+  createdAt?: Date;
+  updatedAt?: Date;
 }
 
-const passwordResetTokenschema = new Schema<IPasswordResetTokenDocument, {}, Methods>({
-  user_id: {
-    type: Schema.Types.ObjectId,
-    ref: "User",
-    required: true,
-  },
-  token: {
-    type: String,
-    required: true,
-  },
-  createdAt: {
-    type: Date,
-    expires: 3600, // 60 * 60
-    default: Date.now(),
-  },
-});
+export interface IPasswordResetTokenInstance extends Model<IPasswordResetTokenAttributes>, IPasswordResetTokenAttributes {
+  compareToken: (token: string) => Promise<boolean>;
+}
 
-passwordResetTokenschema.pre("save", async function (next) {
-  if (this.isModified("token")) {
-    const salt = await genSalt(10);
-    this.token = await hash(this.token, salt);
+class PasswordResetToken extends Model<IPasswordResetTokenAttributes, Omit<IPasswordResetTokenAttributes, 'id'>> implements IPasswordResetTokenAttributes {
+  public id!: string;
+  public user_id!: string;
+  public token!: string;
+  public readonly createdAt!: Date;
+  public readonly updatedAt!: Date;
+
+  public async compareToken(token: string): Promise<boolean> {
+    return await compare(token, this.token);
   }
+}
 
-  next();
+PasswordResetToken.init(
+  {
+    id: {
+      type: DataTypes.UUID,
+      defaultValue: DataTypes.UUIDV4,
+      primaryKey: true,
+    },
+    user_id: {
+      type: DataTypes.UUID,
+      allowNull: false,
+      references: {
+        model: User,
+        key: 'id',
+      },
+      onDelete: 'CASCADE',
+      onUpdate: 'CASCADE',
+    },
+    token: {
+      type: DataTypes.STRING,
+      allowNull: false,
+    },
+  },
+  {
+    sequelize,
+    tableName: "password_reset_tokens",
+    timestamps: true,
+    hooks: {
+      beforeSave: async (resetToken: PasswordResetToken) => {
+        if (resetToken.changed("token")) {
+          const salt = await genSalt(10);
+          resetToken.token = await hash(resetToken.token, salt);
+        }
+      },
+    },
+    // Indexes are handled in migrations
+  }
+);
+
+// Define the association
+PasswordResetToken.belongsTo(User, {
+  foreignKey: 'user_id',
+  as: 'user',
 });
 
-passwordResetTokenschema.methods.compareToken = async function (token) {
-  return await compare(token, this.token);
+User.hasMany(PasswordResetToken, {
+  foreignKey: 'user_id',
+  as: 'passwordResetTokens',
+});
+
+// Add associate method for better organization
+(PasswordResetToken as any).associate = (models: any) => {
+  PasswordResetToken.belongsTo(models.User, {
+    foreignKey: 'user_id',
+    as: 'user',
+  });
 };
 
-const PasswordResetTokenModel = model("PasswordResetToken", passwordResetTokenschema);
-export default PasswordResetTokenModel;
+export default PasswordResetToken;

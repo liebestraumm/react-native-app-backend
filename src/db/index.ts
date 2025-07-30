@@ -16,7 +16,8 @@ export const sequelize = new Sequelize(DB_NAME, DB_USER, DB_PASSWORD, {
       require: true,
       rejectUnauthorized: true
     }
-  }
+  },
+  logging: process.env.NODE_ENV === 'development' ? console.log : false
 });
 
 const connectToDatabase = async () => {

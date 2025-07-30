@@ -1,4 +1,3 @@
-import { isValidObjectId } from "mongoose";
 import * as yup from "yup";
 import categories from "./categories";
 import { parseISO } from "date-fns";
@@ -6,6 +5,15 @@ import { parseISO } from "date-fns";
 const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
 const passwordRegex =
   /^(?=.*[a-zA-Z])(?=.*\d)(?=.*[!@#\$%\^&\*])[a-zA-Z\d!@#\$%\^&\*]+$/;
+
+// UUID validation regex pattern
+const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+// Function to validate UUID format
+const isValidUUID = (value: string | undefined): boolean => {
+  if (!value) return false;
+  return uuidRegex.test(value);
+};
 
 yup.addMethod(yup.string, "email", function validateEmail(message) {
   return this.matches(emailRegex, {
@@ -34,7 +42,7 @@ const tokenAndId = {
     name: "valid-id",
     message: "Invalid user id",
     test: (value) => {
-      return isValidObjectId(value);
+      return isValidUUID(value);
     },
   }),
   token: yup.string().required("Token is missing"),
