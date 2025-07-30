@@ -18,7 +18,6 @@ const envs = {
   DB_HOST: String(process.env.DB_HOST),
   DB_PORT: Number(process.env.DB_PORT),
   DATABASE_URL: String(process.env.DATABASE_URL),
-  NODE_ENV: String(process.env.NODE_ENV),
   PORT: Number(process.env.PORT),
 }
 
