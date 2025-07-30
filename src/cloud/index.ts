@@ -1,8 +1,9 @@
 import { v2 as cloudinary } from "cloudinary";
+import envs from "../env";
 
-const CLOUD_NAME = process.env.CLOUD_NAME!;
-const CLOUD_KEY = process.env.CLOUD_KEY!;
-const CLOUD_SECRET = process.env.CLOUD_SECRET!;
+const CLOUD_NAME = envs.CLOUD_NAME!;
+const CLOUD_KEY = envs.CLOUD_KEY!;
+const CLOUD_SECRET = envs.CLOUD_SECRET!;
 
 cloudinary.config({
   cloud_name: CLOUD_NAME,

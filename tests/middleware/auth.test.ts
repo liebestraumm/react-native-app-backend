@@ -2,8 +2,8 @@ import { Request, Response, NextFunction } from 'express';
 import jwt, { JsonWebTokenError } from 'jsonwebtoken';
 import { isAuth } from '../../src/middleware/auth';
 import User from '../../src/models/User';
-import { HttpError } from '../../src/models/HttpError';
 import HttpCode from '../../src/constants/httpCode';
+import envs from '../../src/env';
 
 // Mock dependencies
 jest.mock('jsonwebtoken');
@@ -64,7 +64,7 @@ describe('isAuth Middleware', () => {
       // Verify jwt.verify was called with correct token
       expect(mockJwt.verify).toHaveBeenCalledWith(
         mockToken,
-        process.env.JWT_SECRET ?? ''
+        envs.JWT_SECRET ?? ''
       );
 
       // Verify User.findByPk was called with correct id

@@ -1,7 +1,7 @@
 import { RequestHandler } from "express";
 import * as yup from "yup";
 import HttpCode from "../constants/httpCode";
-import { HttpError } from "../models/HttpError";
+import { HttpError } from "../lib/HttpError";
 
 const validate = (schema: yup.Schema): RequestHandler => {
   return async (request, _, next) => {

@@ -1,17 +1,21 @@
 import { RequestHandler } from "express";
 import { User, Asset, AuthVerificationToken, PasswordResetToken } from "../models";
-import { HttpError } from "../models/HttpError";
+import { HttpError } from "../lib/HttpError";
 import HttpCode from "../constants/httpCode";
-import crypto from "crypto";
-import "dotenv/config";
+import crypto from "crypto";  
 import jwt from "jsonwebtoken";
 import Mail from "../lib/mail";
 import { v2 as cloudinary } from "cloudinary";
 import { Op } from "sequelize";
+import envs from "../env";
 
-const CLOUD_NAME = process.env.CLOUD_NAME;
-const CLOUD_KEY = process.env.CLOUD_KEY;
-const CLOUD_SECRET = process.env.CLOUD_SECRET;
+
+const VERIFICATION_LINK = envs.VERIFICATION_LINK;
+const JWT_SECRET = envs.JWT_SECRET;
+const PASSWORD_RESET_LINK = envs.PASSWORD_RESET_LINK;
+const CLOUD_NAME = envs.CLOUD_NAME;
+const CLOUD_KEY = envs.CLOUD_KEY;
+const CLOUD_SECRET = envs.CLOUD_SECRET;
 
 cloudinary.config({
   cloud_name: CLOUD_NAME,
@@ -52,10 +56,10 @@ export const createNewUser: RequestHandler = async (
     });
 
     // Send verification link with token to register email.
-    const link = `${process.env.VERIFICATION_LINK ?? ""}?id=${
+    const link = `${envs.VERIFICATION_LINK ?? ""}?id=${
       user.id
     }&token=${token}`;
-    const sender = process.env.MAILTRAP_SENDER ?? "";
+    const sender = envs.MAILTRAP_SENDER ?? "";
     const recipients = [user.email];
     const mailBody = {
       subject: "Verification Mail",
@@ -124,10 +128,10 @@ export const signIn: RequestHandler = async (request, response, next) => {
 
     // Generate access & refresh token if pasword matches.
     const payload = { id: user.id };
-    const accessToken = jwt.sign(payload, process.env.JWT_SECRET ?? "", {
+    const accessToken = jwt.sign(payload, JWT_SECRET ?? "", {
       expiresIn: "15m",
     });
-    const refreshToken = jwt.sign(payload, process.env.JWT_SECRET ?? "");
+    const refreshToken = jwt.sign(payload, JWT_SECRET ?? "");
 
     // Store refresh token inside the Users table.
     if (!user.tokens) user.tokens = [refreshToken];
@@ -175,9 +179,9 @@ export const generateVerificationLink: RequestHandler = async (
     });
     // Send link inside users email
     const link = `${
-      process.env.VERIFICATION_LINK ?? ""
+      VERIFICATION_LINK ?? ""
     }?id=${id}&token=${token}`;
-    const sender = process.env.MAILTRAP_SENDER ?? "";
+    const sender = envs.MAILTRAP_SENDER ?? "";
     const recipients = [email];
     const mailBody = {
       subject: "Verification Link",
@@ -203,7 +207,7 @@ export const refreshAccessToken: RequestHandler = async (
   try {
     if (!refreshToken)
       throw new HttpError("Unauthorized request", HttpCode.FORBIDDEN);
-    const payload = jwt.verify(refreshToken, process.env.JWT_SECRET ?? "") as {
+    const payload = jwt.verify(refreshToken, JWT_SECRET ?? "") as {
       id: string;
     };
 
@@ -232,14 +236,14 @@ export const refreshAccessToken: RequestHandler = async (
     const refreshTokenPayload = { id: user.id };
     const newAccessToken = jwt.sign(
       refreshTokenPayload,
-      process.env.JWT_SECRET ?? "",
+      JWT_SECRET ?? "",
       {
         expiresIn: "15m",
       }
     );
     const newRefreshToken = jwt.sign(
       refreshTokenPayload,
-      process.env.JWT_SECRET ?? ""
+      JWT_SECRET ?? ""
     );
 
     // Remove previous token, update user and send new tokens
@@ -311,7 +315,7 @@ export const generateForgetPasswordLink: RequestHandler = async (
     await PasswordResetToken.create({ user_id: user.id, token });
 
     // Send the link to user's email
-    const passResetLink = `${process.env.PASSWORD_RESET_LINK}?id=${user.id}&token=${token}`;
+    const passResetLink = `${PASSWORD_RESET_LINK}?id=${user.id}&token=${token}`;
     const recipients = [user.email];
     const sender = "security@myapp.com";
     const mailBody = {

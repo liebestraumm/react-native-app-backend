@@ -1,4 +1,4 @@
-import { HttpError } from '../../src/models/HttpError';
+import { HttpError } from '../../src/lib/HttpError';
 import HttpCode from '../../src/constants/httpCode';
 
 describe('HttpError', () => {

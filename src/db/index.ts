@@ -1,40 +1,32 @@
 import { Sequelize } from "sequelize";
-import "dotenv/config";
+import envs from "../env";
+import config from "../sequelize.config";
 
 let sequelize: Sequelize;
+// Environment configuration
+const env = (envs.NODE_ENV || "development") as keyof typeof config;
+const dbConfig = config[env];
 
-if (process.env.DATABASE_URL) {
-  // Production configuration using DATABASE_URL
-  sequelize = new Sequelize(process.env.DATABASE_URL, {
-    dialect: "postgres",
-    dialectOptions: {
-      ssl: {
-        require: true,
-        rejectUnauthorized: false
-      }
-    },
-    logging: false
+if (envs.NODE_ENV === "production") {
+  console.log("Using production database");
+  sequelize = new Sequelize(dbConfig.production_db ?? "", {
+    dialect: dbConfig.dialect,
+    dialectOptions: dbConfig.dialectOptions,
+    logging: false,
   });
 } else {
-  // Development configuration using individual environment variables
-  const DB_NAME = process.env.DB_NAME ?? "";
-  const DB_USER = process.env.DB_USER ?? "";
-  const DB_PASSWORD = process.env.DB_PASSWORD ?? "";
-  const DB_HOST = process.env.DB_HOST ?? "";
-  const DB_PORT = process.env.DB_PORT ? parseInt(process.env.DB_PORT, 10) : 5432;
-
-  sequelize = new Sequelize(DB_NAME, DB_USER, DB_PASSWORD, {
-    host: DB_HOST,
-    port: DB_PORT,
-    dialect: "postgres",
-    dialectOptions: {
-      ssl: {
-        require: true,
-        rejectUnauthorized: false
-      }
-    },
-    logging: process.env.NODE_ENV === 'development' ? console.log : false
-  });
+  console.log("Using development database");
+  sequelize = new Sequelize(
+    dbConfig.database ?? "",
+    dbConfig.username ?? "",
+    dbConfig.password ?? "",
+    {
+      host: dbConfig.host,
+      dialect: dbConfig.dialect,
+      dialectOptions: dbConfig.dialectOptions,
+      logging: false,
+    }
+  );
 }
 
 export { sequelize };
@@ -43,9 +35,9 @@ const connectToDatabase = async () => {
   try {
     await sequelize.authenticate();
     console.log("Database connection has been established successfully.");
-    
+
     // Only sync in development
-    if (process.env.NODE_ENV !== 'production') {
+    if (envs.NODE_ENV !== "production") {
       await sequelize.sync({ alter: true });
       console.log("Database models synchronized successfully.");
     }

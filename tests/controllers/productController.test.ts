@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { listNewProduct } from '../../src/controllers/productController';
 import Product from '../../src/models/Product';
 import Asset from '../../src/models/Asset';
-import { HttpError } from '../../src/models/HttpError';
+import { HttpError } from '../../src/lib/HttpError';
 import HttpCode from '../../src/constants/httpCode';
 import cloudUploader from '../../src/cloud';
 

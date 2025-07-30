@@ -1,6 +1,6 @@
 import { RequestHandler } from "express";
 import HttpCode from "../constants/httpCode";
-import { HttpError } from "../models/HttpError";
+import { HttpError } from "../lib/HttpError";
 import { Product, Asset, User } from "../models";
 import { UploadApiResponse } from "cloudinary";
 import cloudUploader, { cloudApi } from "../cloud";

@@ -1,5 +1,5 @@
 import { RequestHandler } from "express";
-import { HttpError } from "../models/HttpError";
+import { HttpError } from "../lib/HttpError";
 import HttpCode from "../constants/httpCode";
 import jwt, { JsonWebTokenError, TokenExpiredError } from "jsonwebtoken";
 import { User as UserModel, Asset, PasswordResetToken } from "../models";

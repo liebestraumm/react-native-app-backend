@@ -1,5 +1,6 @@
 import nodemailer from "nodemailer";
 import "dotenv/config";
+import envs from "../env";
 
 interface IMailBody {
   subject: string;
@@ -19,11 +20,11 @@ class Mail {
   async send() {
     // Looking to send emails in production? Check out our Email API/SMTP product!
     var transport = nodemailer.createTransport({
-      host: process.env.MAILTRAP_HOST,
+      host: envs.MAILTRAP_HOST,
       port: 2525,
       auth: {
-        user: process.env.MAILTRAP_USER,
-        pass: process.env.MAILTRAP_PASS,
+        user: envs.MAILTRAP_USER,
+        pass: envs.MAILTRAP_PASS,
       },
     });
     await transport.sendMail({

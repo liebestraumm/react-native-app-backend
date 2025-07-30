@@ -2,7 +2,6 @@ import { Request, Response, NextFunction } from 'express';
 import { createNewUser, verifyEmail } from '../../src/controllers/authController';
 import User from '../../src/models/User';
 import AuthVerificationToken from '../../src/models/AuthVerificationToken';
-import { HttpError } from '../../src/models/HttpError';
 import HttpCode from '../../src/constants/httpCode';
 import Mail from '../../src/lib/mail';
 
