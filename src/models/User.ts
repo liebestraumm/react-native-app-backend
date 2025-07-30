@@ -40,7 +40,7 @@ class User extends Model<IUserAttributes, Omit<IUserAttributes, 'id'>> implement
 
   public static associate(models: any) {
     // One-to-one relationship: One user can have one avatar
-    User.belongsTo(models.Asset, {
+    User.hasOne(models.Asset, {
       foreignKey: 'avatarId',
       as: 'avatar',
     });

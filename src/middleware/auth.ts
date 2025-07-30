@@ -2,11 +2,9 @@ import { RequestHandler } from "express";
 import { HttpError } from "../models/HttpError";
 import HttpCode from "../constants/httpCode";
 import jwt, { JsonWebTokenError, TokenExpiredError } from "jsonwebtoken";
-import UserModel from "../models/User";
-import Asset from "../models/Asset";
+import { User as UserModel, Asset, PasswordResetToken } from "../models";
 import { IUserProfile } from "../interfaces/IUserProfile";
 import "dotenv/config";
-import PasswordResetToken from "../models/PasswordResetToken";
 
 declare global {
   namespace Express {

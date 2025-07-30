@@ -1,14 +1,11 @@
 import { RequestHandler } from "express";
-import User from "../models/User";
-import Asset from "../models/Asset";
+import { User, Asset, AuthVerificationToken, PasswordResetToken } from "../models";
 import { HttpError } from "../models/HttpError";
 import HttpCode from "../constants/httpCode";
 import crypto from "crypto";
-import AuthVerificationToken from "../models/AuthVerificationToken";
 import "dotenv/config";
 import jwt from "jsonwebtoken";
 import Mail from "../lib/mail";
-import PasswordResetToken from "../models/PasswordResetToken";
 import { v2 as cloudinary } from "cloudinary";
 import { Op } from "sequelize";
 

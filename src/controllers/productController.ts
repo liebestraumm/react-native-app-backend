@@ -1,12 +1,10 @@
 import { RequestHandler } from "express";
 import HttpCode from "../constants/httpCode";
 import { HttpError } from "../models/HttpError";
-import Product from "../models/Product";
-import Asset from "../models/Asset";
+import { Product, Asset, User } from "../models";
 import { UploadApiResponse } from "cloudinary";
 import cloudUploader, { cloudApi } from "../cloud";
 import categories from "../lib/categories";
-import User from "../models/User";
 
 const uploadImage = (filePath: string): Promise<UploadApiResponse> => {
   return cloudUploader.upload(filePath, {

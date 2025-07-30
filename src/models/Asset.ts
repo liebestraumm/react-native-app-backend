@@ -23,7 +23,7 @@ class Asset extends Model<IAssetAttributes, Omit<IAssetAttributes, 'id'>> implem
 
   public static associate(models: any) {
     // One-to-one relationship: One asset can be the avatar of one user
-    Asset.hasOne(models.User, {
+    Asset.belongsTo(models.User, {
       foreignKey: 'avatarId',
       as: 'user',
     });

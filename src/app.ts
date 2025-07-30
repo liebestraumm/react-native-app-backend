@@ -2,6 +2,7 @@ import express, { NextFunction, Request, Response } from "express";
 import { HttpError } from "./models/HttpError";
 import HttpCode from "./constants/httpCode";
 import "./db";
+import "./models"; // Import models to ensure associations are set up
 import authRoutes from "./routes/authRoutes";
 import productRoutes from "./routes/productRoutes";
 import formidable from "formidable";
@@ -48,8 +49,8 @@ app.use(
 
 const startServer = async () => {
   try {
-    app.listen(process.env.PORT ?? 3000, () => {
-      console.log(`App running on port ${process.env.PORT ?? 3000}!`);
+    app.listen(process.env.PORT ?? 8000, () => {
+      console.log(`App running on port ${process.env.PORT ?? 8000}!`);
     });
   } catch (err) {
     console.error("Failed to connect to database. Server not started.", err);
