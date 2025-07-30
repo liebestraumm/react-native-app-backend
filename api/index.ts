@@ -9,7 +9,7 @@ import path from "path";
 import envs from "./env";
 const app = express();
 
-app.use(express.static("src/public"));
+app.use(express.static("api/public"));
 app.use(express.json());
 
 // Routes
