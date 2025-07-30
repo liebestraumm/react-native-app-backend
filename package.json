@@ -1,5 +1,5 @@
 {
-  "name": "react-native-app-backend",
+  "name": "ugm-backend",
   "version": "1.0.0",
   "description": "Backend App Portfolio mde with NodeJS",
   "main": "app.js",
