@@ -25,6 +25,14 @@ class PasswordResetToken extends Model<IPasswordResetTokenAttributes, Omit<IPass
   public async compareToken(token: string): Promise<boolean> {
     return await compare(token, this.token);
   }
+
+  public static associate(models: any) {
+    // Many-to-one relationship: Many password reset tokens can belong to one user
+    PasswordResetToken.belongsTo(models.User, {
+      foreignKey: 'user_id',
+      as: 'user',
+    });
+  }
 }
 
 PasswordResetToken.init(
@@ -64,24 +72,5 @@ PasswordResetToken.init(
     // Indexes are handled in migrations
   }
 );
-
-// Define the association
-PasswordResetToken.belongsTo(User, {
-  foreignKey: 'user_id',
-  as: 'user',
-});
-
-User.hasMany(PasswordResetToken, {
-  foreignKey: 'user_id',
-  as: 'passwordResetTokens',
-});
-
-// Add associate method for better organization
-(PasswordResetToken as any).associate = (models: any) => {
-  PasswordResetToken.belongsTo(models.User, {
-    foreignKey: 'user_id',
-    as: 'user',
-  });
-};
 
 export default PasswordResetToken;

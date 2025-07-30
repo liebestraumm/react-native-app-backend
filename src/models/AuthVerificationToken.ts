@@ -25,6 +25,14 @@ class AuthVerificationToken extends Model<IAuthVerificationTokenAttributes, Omit
   public async compareToken(token: string): Promise<boolean> {
     return await compare(token, this.token);
   }
+
+  public static associate(models: any) {
+    // Many-to-one relationship: Many verification tokens can belong to one user
+    AuthVerificationToken.belongsTo(models.User, {
+      foreignKey: 'user_id',
+      as: 'user',
+    });
+  }
 }
 
 AuthVerificationToken.init(
@@ -64,24 +72,5 @@ AuthVerificationToken.init(
     // Indexes are handled in migrations
   }
 );
-
-// Define the association
-AuthVerificationToken.belongsTo(User, {
-  foreignKey: 'user_id',
-  as: 'user',
-});
-
-User.hasMany(AuthVerificationToken, {
-  foreignKey: 'user_id',
-  as: 'verificationTokens',
-});
-
-// Add associate method for better organization
-(AuthVerificationToken as any).associate = (models: any) => {
-  AuthVerificationToken.belongsTo(models.User, {
-    foreignKey: 'user_id',
-    as: 'user',
-  });
-};
 
 export default AuthVerificationToken;

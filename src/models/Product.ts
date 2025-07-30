@@ -1,9 +1,8 @@
 import { Model, DataTypes } from "sequelize";
 import { sequelize } from "../db";
 import User from "./User";
+import Asset from "./Asset";
 import categories from "../lib/categories";
-
-export type ProductImage = { url: string; id: string };
 
 export interface IProductAttributes {
   id?: string;
@@ -13,7 +12,6 @@ export interface IProductAttributes {
   price: number;
   category: string;
   purchasingDate: Date;
-  images?: ProductImage[];
   thumbnail?: string;
   createdAt?: Date;
   updatedAt?: Date;
@@ -21,6 +19,7 @@ export interface IProductAttributes {
 
 export interface IProductInstance extends Model<IProductAttributes>, IProductAttributes {
   owner?: any;
+  assets?: Asset[];
 }
 
 class Product extends Model<IProductAttributes, Omit<IProductAttributes, 'id'>> implements IProductAttributes {
@@ -31,10 +30,26 @@ class Product extends Model<IProductAttributes, Omit<IProductAttributes, 'id'>> 
   public price!: number;
   public category!: string;
   public purchasingDate!: Date;
-  public images?: ProductImage[];
   public thumbnail?: string;
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
+  
+  // Add assets property for TypeScript
+  public assets?: Asset[];
+
+  public static associate(models: any) {
+    // Many-to-one relationship: Many products can belong to one user
+    Product.belongsTo(models.User, {
+      foreignKey: 'user_id',
+      as: 'owner',
+    });
+    
+    // One-to-many relationship: One product can have many assets
+    Product.hasMany(models.Asset, {
+      foreignKey: 'product_id',
+      as: 'assets',
+    });
+  }
 }
 
 Product.init(
@@ -83,11 +98,6 @@ Product.init(
       type: DataTypes.DATE,
       allowNull: false,
     },
-    images: {
-      type: DataTypes.JSON,
-      allowNull: true,
-      defaultValue: [],
-    },
     thumbnail: {
       type: DataTypes.STRING,
       allowNull: true,
@@ -100,24 +110,5 @@ Product.init(
     // Indexes are handled in migrations
   }
 );
-
-// Define the association
-Product.belongsTo(User, {
-  foreignKey: 'user_id',
-  as: 'owner',
-});
-
-User.hasMany(Product, {
-  foreignKey: 'user_id',
-  as: 'products',
-});
-
-// Add associate method for better organization
-(Product as any).associate = (models: any) => {
-  Product.belongsTo(models.User, {
-    foreignKey: 'user_id',
-    as: 'owner',
-  });
-};
 
 export default Product;

@@ -6,6 +6,7 @@ import User from './User';
 import Product from './Product';
 import AuthVerificationToken from './AuthVerificationToken';
 import PasswordResetToken from './PasswordResetToken';
+import Asset from './Asset';
 import { HttpError } from './HttpError';
 
 // Environment configuration
@@ -29,6 +30,7 @@ interface Database {
   Product: typeof Product;
   AuthVerificationToken: typeof AuthVerificationToken;
   PasswordResetToken: typeof PasswordResetToken;
+  Asset: typeof Asset;
   HttpError: typeof HttpError;
   [key: string]: any;
 }
@@ -53,15 +55,16 @@ const db: Database = {
   Product,
   AuthVerificationToken,
   PasswordResetToken,
+  Asset,
   HttpError
 };
 
-// Set up associations if any model has them
-Object.keys(db).forEach((modelName: string) => {
-  if (db[modelName] && typeof db[modelName] === 'object' && 'associate' in db[modelName]) {
-    (db[modelName] as any).associate(db);
-  }
-});
+// Set up associations for all models
+User.associate(db);
+(Product as any).associate(db);
+Asset.associate(db);
+AuthVerificationToken.associate(db);
+PasswordResetToken.associate(db);
 
 export default db;
-export { User, Product, AuthVerificationToken, PasswordResetToken, HttpError }; 
+export { User, Product, AuthVerificationToken, PasswordResetToken, Asset, HttpError }; 

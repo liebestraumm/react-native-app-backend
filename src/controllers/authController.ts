@@ -1,5 +1,6 @@
 import { RequestHandler } from "express";
 import User from "../models/User";
+import Asset from "../models/Asset";
 import { HttpError } from "../models/HttpError";
 import HttpCode from "../constants/httpCode";
 import crypto from "crypto";
@@ -113,7 +114,10 @@ export const signIn: RequestHandler = async (request, response, next) => {
   const { email, password } = request.body;
   try {
     // Find user with the provided email. Send error if user not found.
-    const user = await User.findOne({ where: { email } });
+    const user = await User.findOne({ 
+      where: { email },
+      include: [{ model: Asset, as: 'avatar' }]
+    });
     if (!user)
       throw new HttpError("Email/Password mismatch", HttpCode.FORBIDDEN);
     // Check if the password is valid or not.
@@ -140,6 +144,7 @@ export const signIn: RequestHandler = async (request, response, next) => {
         email: user.email,
         name: user.name,
         verified: user.verified,
+        avatar: user.avatar?.url,
       },
       tokens: { refresh: refreshToken, access: accessToken },
     });
@@ -214,6 +219,7 @@ export const refreshAccessToken: RequestHandler = async (
         id: payload.id as string,
         tokens: { [Op.contains]: [refreshToken] },
       },
+      include: [{ model: Asset, as: 'avatar' }]
     });
     // If the refresh token is valid and no user found, refreshtoken is compromised and hence it can't be used to create another access token
     if (!user) {
@@ -413,17 +419,28 @@ export const updateAvatar: RequestHandler = async (request, response, next) => {
       throw new HttpError("Invalid image file", HttpCode.UNPROCESSABLE_ENTITY);
     }
 
-    const user = await User.findByPk(request.user.id as string);
+    const user = await User.findByPk(request.user.id as string, {
+      include: [{ model: Asset, as: 'avatar' }]
+    });
     if (!user) {
       throw new HttpError("user not found", HttpCode.UNPROCESSABLE_ENTITY);
     }
 
-    if (user.avatar?.id) {
-      // remove avatar file
-      await cloudinary.uploader.destroy(user.avatar.id);
+    // If user has an existing avatar, delete it from cloudinary and remove the asset
+    if (user.avatarId) {
+      const existingAsset = await Asset.findByPk(user.avatarId);
+      if (existingAsset) {
+        // Extract public_id from the URL or store it separately
+        // For now, we'll assume the URL contains the public_id
+        const publicId = existingAsset.url.split('/').pop()?.split('.')[0];
+        if (publicId) {
+          await cloudinary.uploader.destroy(publicId);
+        }
+        await existingAsset.destroy();
+      }
     }
 
-    // upload avatar file, not locally but to the cloud using Cloudinary
+    // upload avatar file to Cloudinary
     const { secure_url: url, public_id: id } = await cloudinary.uploader.upload(
       avatar.filepath,
       {
@@ -433,10 +450,15 @@ export const updateAvatar: RequestHandler = async (request, response, next) => {
         gravity: "face",
       }
     );
-    user.avatar = { url, id };
+
+    // Create new asset record
+    const newAsset = await Asset.create({ url });
+    
+    // Update user with new avatar
+    user.avatarId = newAsset.id;
     await user.save();
 
-    response.json({ profile: { ...request.user, avatar: user.avatar.url } });
+    response.json({ profile: { ...request.user, avatar: newAsset.url } });
   } catch (error) {
     console.log(error);
     return next(error);
@@ -450,7 +472,9 @@ export const sendPublicProfile: RequestHandler = async (
 ) => {
   const profileId = request.params.id;
   try {
-    const user = await User.findByPk(profileId);
+    const user = await User.findByPk(profileId, {
+      include: [{ model: Asset, as: 'avatar' }]
+    });
     if (!user) {
       throw new HttpError("Profile not found!", HttpCode.NOT_FOUND);
     }

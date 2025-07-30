@@ -5,6 +5,7 @@ export interface IUserDocument {
     name: string;
     verified: boolean;
     tokens: string[];
+    avatarId?: string;
     avatar?: {
       id: string;
       url: string;

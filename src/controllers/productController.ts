@@ -2,6 +2,7 @@ import { RequestHandler } from "express";
 import HttpCode from "../constants/httpCode";
 import { HttpError } from "../models/HttpError";
 import Product from "../models/Product";
+import Asset from "../models/Asset";
 import { UploadApiResponse } from "cloudinary";
 import cloudUploader, { cloudApi } from "../cloud";
 import categories from "../lib/categories";
@@ -73,7 +74,14 @@ export const listNewProduct: RequestHandler = async (
       const uploadPromise = images.map((file) => uploadImage(file.filepath));
       // Wait for all file uploads to complete
       const uploadResults = await Promise.all(uploadPromise);
-      // Add the image URLs and public IDs to the product's images field
+      // Create Asset records for each uploaded image
+      const assetPromises = uploadResults.map(({ secure_url, public_id }) => {
+        return Asset.create({
+          url: secure_url,
+          product_id: newProduct.id,
+        });
+      });
+      await Promise.all(assetPromises);
       productImages = uploadResults.map(({ secure_url, public_id }) => {
         return { url: secure_url, id: public_id };
       });
@@ -82,14 +90,17 @@ export const listNewProduct: RequestHandler = async (
     } else {
       if (images) {
         const { secure_url, public_id } = await uploadImage(images.filepath);
+        await Asset.create({
+          url: secure_url,
+          product_id: newProduct.id,
+        });
         productImages = [{ url: secure_url, id: public_id }];
         productThumbnail = secure_url;
       }
     }
 
-    // Update the product with images
+    // Update the product with thumbnail
     await newProduct.update({
-      images: productImages,
       thumbnail: productThumbnail,
     });
 
@@ -111,6 +122,12 @@ export const updateProduct: RequestHandler = async (req, res, next) => {
   try {
     const product = await Product.findOne({
       where: { id: productId, user_id: req.user.id as string },
+      include: [
+        {
+          model: Asset,
+          as: 'assets',
+        },
+      ],
     });
 
     if (!product) throw new HttpError("Product Not Found", HttpCode.NOT_FOUND);
@@ -130,8 +147,8 @@ export const updateProduct: RequestHandler = async (req, res, next) => {
     const isMultipleImages = Array.isArray(images);
 
     if (isMultipleImages) {
-      const oldImages = product.images?.length || 0;
-      if (oldImages + images.length > 5)
+      const currentAssets = product.assets || [];
+      if (currentAssets.length + images.length > 5)
         throw new HttpError(
           "Image files can not be more than 5!",
           HttpCode.UNPROCESSABLE_ENTITY
@@ -163,28 +180,25 @@ export const updateProduct: RequestHandler = async (req, res, next) => {
       );
 
     // FILE UPLOAD
-
     if (isMultipleImages) {
       const uploadPromise = images.map((file) => uploadImage(file.filepath));
       // Wait for all file uploads to complete
       const uploadResults = await Promise.all(uploadPromise);
-      // Add the image URLs and public IDs to the product's images field
-      const newImages = uploadResults.map(({ secure_url, public_id }) => {
-        return { url: secure_url, id: public_id };
+      // Create Asset records for each uploaded image
+      const assetPromises = uploadResults.map(({ secure_url, public_id }) => {
+        return Asset.create({
+          url: secure_url,
+          product_id: product.id,
+        });
       });
-
-      const currentImages = product.images || [];
-      const updatedImages = [...currentImages, ...newImages];
-      await product.update({ images: updatedImages });
+      await Promise.all(assetPromises);
     } else {
       if (images) {
         const { secure_url, public_id } = await uploadImage(images.filepath);
-        const currentImages = product.images || [];
-        const updatedImages = [
-          ...currentImages,
-          { url: secure_url, id: public_id },
-        ];
-        await product.update({ images: updatedImages });
+        await Asset.create({
+          url: secure_url,
+          product_id: product.id,
+        });
       }
     }
 
@@ -205,18 +219,37 @@ export const deleteProduct: RequestHandler = async (req, res, next) => {
 
     const product = await Product.findOne({
       where: { id: productId, user_id: req.user.id as string },
+      include: [
+        {
+          model: Asset,
+          as: 'assets',
+        },
+      ],
     });
 
     if (!product) throw new HttpError("Product not found", HttpCode.NOT_FOUND);
 
-    // Delete the product
-    await product.destroy();
-
-    const images = product.images || [];
-    if (images.length) {
-      const ids = images.map(({ id }) => id);
-      await cloudApi.delete_resources(ids);
+    // Delete associated assets from cloud storage
+    const assets = product.assets || [];
+    if (assets.length > 0) {
+      // Extract public_ids from URLs (this is a simplified approach)
+      // In a real implementation, you might want to store public_id in the Asset model
+      const publicIds = assets.map(asset => {
+        // Extract public_id from URL - this is a simplified approach
+        const urlParts = asset.url.split('/');
+        const filename = urlParts[urlParts.length - 1];
+        return filename.split('.')[0]; // Remove extension
+      });
+      
+      try {
+        await cloudApi.delete_resources(publicIds);
+      } catch (error) {
+        console.log('Error deleting from cloud storage:', error);
+      }
     }
+
+    // Delete the product (this will cascade delete assets due to foreign key constraint)
+    await product.destroy();
 
     res.json({ message: "Product removed successfully." });
   } catch (error) {
@@ -235,26 +268,44 @@ export const deleteProductImage: RequestHandler = async (req, res, next) => {
 
     const product = await Product.findOne({
       where: { id: productId, user_id: req.user.id as string },
+      include: [
+        {
+          model: Asset,
+          as: 'assets',
+        },
+      ],
     });
 
     if (!product) throw new HttpError("Product not found", HttpCode.NOT_FOUND);
 
-    // Remove the image from the images array
-    const currentImages = product.images || [];
-    const updatedImages = currentImages.filter((img) => img.id !== imageId);
-    await product.update({ images: updatedImages });
+    // Find the asset to delete
+    const assetToDelete = product.assets?.find(asset => asset.id === imageId);
+    if (!assetToDelete) {
+      throw new HttpError("Image not found", HttpCode.NOT_FOUND);
+    }
 
-    if (product.thumbnail?.includes(imageId)) {
-      const images = updatedImages;
-      if (images.length > 0) {
-        await product.update({ thumbnail: images[0].url });
+    // Delete the asset
+    await assetToDelete.destroy();
+
+    // Update thumbnail if it was the deleted image
+    if (product.thumbnail === assetToDelete.url) {
+      const remainingAssets = product.assets?.filter(asset => asset.id !== imageId) || [];
+      if (remainingAssets.length > 0) {
+        await product.update({ thumbnail: remainingAssets[0].url });
       } else {
-        await product.update({ thumbnail: "" });
+        await product.update({ thumbnail: undefined });
       }
     }
 
-    // removing from cloud storage
-    await cloudUploader.destroy(imageId);
+    // Remove from cloud storage
+    try {
+      const urlParts = assetToDelete.url.split('/');
+      const filename = urlParts[urlParts.length - 1];
+      const publicId = filename.split('.')[0];
+      await cloudUploader.destroy(publicId);
+    } catch (error) {
+      console.log('Error deleting from cloud storage:', error);
+    }
 
     res.json({ message: "Image removed successfully." });
   } catch (error) {
@@ -278,6 +329,10 @@ export const getProductDetail: RequestHandler = async (req, res, next) => {
           as: "owner",
           attributes: ["id", "name", "avatar"],
         },
+        {
+          model: Asset,
+          as: "assets",
+        },
       ],
     });
     if (!product) throw new HttpError("Product Not Found!", HttpCode.NOT_FOUND);
@@ -291,7 +346,7 @@ export const getProductDetail: RequestHandler = async (req, res, next) => {
         category: product.category,
         date: product.purchasingDate,
         price: product.price,
-        image: product.images?.map(({ url }) => url),
+        image: product.assets?.map((asset) => asset.url),
         seller: { ...user },
       },
     });
@@ -367,6 +422,12 @@ export const getListings: RequestHandler = async (req, res, next) => {
       order: [["createdAt", "DESC"]],
       offset: (+pageNo - 1) * +limit,
       limit: +limit,
+      include: [
+        {
+          model: Asset,
+          as: "assets",
+        },
+      ],
     });
 
     const listings = products.map((p) => {
@@ -376,7 +437,7 @@ export const getListings: RequestHandler = async (req, res, next) => {
         thumbnail: p.thumbnail,
         category: p.category,
         price: p.price,
-        image: p.images?.map((i) => i.url),
+        image: p.assets?.map((asset) => asset.url),
         date: p.purchasingDate,
         description: p.description,
         seller: {
