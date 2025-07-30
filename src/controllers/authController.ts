@@ -128,10 +128,12 @@ export const signIn: RequestHandler = async (request, response, next) => {
     response.status(HttpCode.OK).json({
       message: "You are signed in!",
       data: {
-        id: user._id,
-        email: user.email,
-        name: user.name,
-        verified: user.verified,
+        profile: {
+          id: user._id,
+          email: user.email,
+          name: user.name,
+          verified: user.verified,
+        },
         tokens: { refresh: refreshToken, access: accessToken },
       },
     });
