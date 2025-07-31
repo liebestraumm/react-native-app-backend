@@ -280,13 +280,6 @@ export const signOut: RequestHandler = async (request, response, next) => {
         "Unauthorized request, user not found",
         HttpCode.FORBIDDEN
       );
-    
-    if (!user.tokens.includes(refreshToken)) {
-      throw new HttpError(
-        "Invalid refresh token",
-        HttpCode.FORBIDDEN
-      );
-    }
     const newTokens = user?.tokens.filter((token) => token !== refreshToken);
     user.tokens = newTokens;
     await user.save();
