@@ -7,8 +7,16 @@ import productRoutes from "./routes/productRoutes";
 import formidable from "formidable";
 import path from "path";
 import envs from "./env";
+import http from "http";
+import { Server } from "socket.io";
+import morgan from "morgan";
+import { verify, TokenExpiredError } from "jsonwebtoken";
 const app = express();
-
+const server = http.createServer(app);
+const io = new Server(server, {
+  path: "/socket-message",
+});
+app.use(morgan("dev"));
 app.use(express.static("api/public"));
 app.use(express.json());
 
@@ -16,11 +24,62 @@ app.use(express.json());
 app.use("/api/auth", authRoutes);
 app.use("/api/product", productRoutes);
 
-// Checks if the route exists. If not, it throws an error
-app.use(() => {
-  const error = new HttpError("Could not find this route", HttpCode.NOT_FOUND);
-  throw error;
+// SOCKET IO
+io.use((socket, next) => {
+  const socketReq = socket.handshake.auth as { token: string } | undefined;
+  if (!socketReq?.token) {
+    return next(new Error("Unauthorized request!"));
+  }
+
+  try {
+    socket.data.jwtDecode = verify(socketReq.token, envs.JWT_SECRET!);
+  } catch (error) {
+    if (error instanceof TokenExpiredError) {
+      return next(new Error("jwt expired"));
+    }
+
+    return next(new Error("Invalid token!"));
+  }
+
+  next();
 });
+
+type MessageProfile = {
+  id: string;
+  name: string;
+  avatar?: string;
+};
+
+type IncomingMessage = {
+  message: {
+    id: string;
+    time: string;
+    text: string;
+    user: MessageProfile;
+  };
+  to: string;
+  conversationId: string;
+};
+
+type OutgoingMessageResponse = {
+  message: {
+    id: string;
+    time: string;
+    text: string;
+    user: MessageProfile;
+    viewed: boolean;
+  };
+  from: MessageProfile;
+  conversationId: string;
+};
+
+type SeenData = {
+  messageId: string;
+  peerId: string;
+  conversationId: string;
+};
+
+
 
 // Upload file functionality
 app.post("/upload-file", async (req, res) => {
