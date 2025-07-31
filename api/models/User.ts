@@ -20,6 +20,8 @@ export interface IUserInstance extends Model<IUserAttributes>, IUserAttributes {
   passwordResetTokens?: any[];
   products?: any[];
   avatar?: any;
+  conversations?: any[];
+  chats?: any[];
 }
 
 class User extends Model<IUserAttributes, Omit<IUserAttributes, 'id'>> implements IUserAttributes {
@@ -61,6 +63,20 @@ class User extends Model<IUserAttributes, Omit<IUserAttributes, 'id'>> implement
     User.hasMany(models.PasswordResetToken, {
       foreignKey: 'user_id',
       as: 'passwordResetTokens',
+    });
+
+    // Many-to-many relationship: Many users can participate in many conversations
+    User.belongsToMany(models.Conversation, {
+      through: 'conversation_participants',
+      foreignKey: 'userId',
+      otherKey: 'conversationId',
+      as: 'conversations',
+    });
+
+    // One-to-many relationship: One user can send many chats
+    User.hasMany(models.Chat, {
+      foreignKey: 'sentBy',
+      as: 'chats',
     });
   }
 }
