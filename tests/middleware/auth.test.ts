@@ -1,13 +1,57 @@
+// Mock the entire models module and database
+jest.mock('../../api/models', () => ({
+  User: {
+    create: jest.fn(),
+    findOne: jest.fn(),
+    findByPk: jest.fn(),
+    findAll: jest.fn(),
+    destroy: jest.fn(),
+  },
+  Product: {
+    create: jest.fn(),
+    findOne: jest.fn(),
+    findByPk: jest.fn(),
+    findAll: jest.fn(),
+    destroy: jest.fn(),
+  },
+  Asset: {
+    create: jest.fn(),
+    findOne: jest.fn(),
+    findByPk: jest.fn(),
+    findAll: jest.fn(),
+    destroy: jest.fn(),
+  },
+  AuthVerificationToken: {
+    create: jest.fn(),
+    findOne: jest.fn(),
+    findByPk: jest.fn(),
+    findAll: jest.fn(),
+    destroy: jest.fn(),
+  },
+  PasswordResetToken: {
+    create: jest.fn(),
+    findOne: jest.fn(),
+    findByPk: jest.fn(),
+    findAll: jest.fn(),
+    destroy: jest.fn(),
+  },
+}));
+
+jest.mock('../../api/db', () => ({
+  sequelize: {
+    authenticate: jest.fn(),
+    sync: jest.fn(),
+  },
+}));
+
+jest.mock('jsonwebtoken');
+
 import { Request, Response, NextFunction } from 'express';
 import jwt, { JsonWebTokenError } from 'jsonwebtoken';
 import { isAuth } from '../../api/middleware/auth';
-import User from '../../api/models/User';
+import { User } from '../../api/models';
 import HttpCode from '../../api/constants/httpCode';
 import envs from '../../api/env';
-
-// Mock dependencies
-jest.mock('jsonwebtoken');
-jest.mock('../../api/models/User');
 
 const mockJwt = jwt as jest.Mocked<typeof jwt>;
 const mockUser = User as jest.Mocked<typeof User>;

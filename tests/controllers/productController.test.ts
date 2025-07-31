@@ -1,15 +1,62 @@
+// Mock the entire models module and database
+jest.mock('../../api/models', () => ({
+  Product: {
+    create: jest.fn(),
+    findOne: jest.fn(),
+    findByPk: jest.fn(),
+    findAll: jest.fn(),
+    destroy: jest.fn(),
+  },
+  Asset: {
+    create: jest.fn(),
+    findOne: jest.fn(),
+    findByPk: jest.fn(),
+    findAll: jest.fn(),
+    destroy: jest.fn(),
+  },
+  User: {
+    create: jest.fn(),
+    findOne: jest.fn(),
+    findByPk: jest.fn(),
+    findAll: jest.fn(),
+    destroy: jest.fn(),
+  },
+}));
+
+jest.mock('../../api/db', () => ({
+  sequelize: {
+    authenticate: jest.fn(),
+    sync: jest.fn(),
+  },
+}));
+
+jest.mock('../../api/cloud', () => ({
+  __esModule: true,
+  default: {
+    upload: jest.fn(),
+    destroy: jest.fn(),
+  },
+  cloudApi: {
+    delete_resources: jest.fn(),
+  },
+}));
+
 import { Request, Response, NextFunction } from 'express';
 import { listNewProduct } from '../../api/controllers/productController';
-import Product from '../../api/models/Product';
-import Asset from '../../api/models/Asset';
+import { Product, Asset } from '../../api/models';
 import { HttpError } from '../../api/lib/HttpError';
 import HttpCode from '../../api/constants/httpCode';
 import cloudUploader from '../../api/cloud';
+import { IUserProfile } from '../../api/interfaces/IUserProfile';
 
-// Mock dependencies 
-jest.mock('../../api/models/Product');
-jest.mock('../../api/models/Asset');
-jest.mock('../../api/cloud');
+// Extend Request interface to include user property
+declare global {
+  namespace Express {
+    interface Request {
+      user: IUserProfile;
+    }
+  }
+}
 
 const mockProduct = Product as jest.Mocked<typeof Product>;
 const mockAsset = Asset as jest.Mocked<typeof Asset>;
@@ -74,14 +121,15 @@ describe('ProductController', () => {
 
   describe('listNewProduct', () => {
     it('should create a new product successfully with single image', async () => {
-      // Mock Product.create to return a new product
+      // Mock Product.create to return a new product with update method
       const createdProduct = {
         id: '456e7890-e89b-12d3-a456-426614174000',
         name: 'Test Product',
         price: 99.99,
         category: 'Electronics',
         description: 'A test product description',
-        user_id: '123e4567-e89b-12d3-a456-426614174000'
+        user_id: '123e4567-e89b-12d3-a456-426614174000',
+        update: jest.fn().mockResolvedValue(true)
       };
       mockProduct.create.mockResolvedValue(createdProduct as any);
 
@@ -125,6 +173,15 @@ describe('ProductController', () => {
         url: 'https://res.cloudinary.com/test/image/upload/test.jpg',
         product_id: '456e7890-e89b-12d3-a456-426614174000'
       });
+
+      // Verify product update was called with thumbnail
+      expect(createdProduct.update).toHaveBeenCalledWith({
+        thumbnail: 'https://res.cloudinary.com/test/image/upload/test.jpg'
+      });
+
+      // Verify response
+      expect(mockResponse.status).toHaveBeenCalledWith(201);
+      expect(mockResponse.json).toHaveBeenCalledWith({ message: 'New product added!' });
     });
 
     it('should create a new product successfully with multiple images', async () => {
@@ -138,7 +195,8 @@ describe('ProductController', () => {
 
       // Mock Product.create
       const createdProduct = {
-        id: '456e7890-e89b-12d3-a456-426614174000'
+        id: '456e7890-e89b-12d3-a456-426614174000',
+        update: jest.fn().mockResolvedValue(true)
       };
       mockProduct.create.mockResolvedValue(createdProduct as any);
 
@@ -167,15 +225,21 @@ describe('ProductController', () => {
 
       // Verify Asset.create was called twice
       expect(mockAsset.create).toHaveBeenCalledTimes(2);
+
+      // Verify product update was called with first image as thumbnail
+      expect(createdProduct.update).toHaveBeenCalledWith({
+        thumbnail: 'https://res.cloudinary.com/test/image/upload/test1.jpg'
+      });
     });
 
-    it('should handle product creation without images', async () => {
+    it('should create a new product successfully without images', async () => {
       // Mock no images
       mockRequest.files = {};
 
       // Mock Product.create
       const createdProduct = {
-        id: '456e7890-e89b-12d3-a456-426614174000'
+        id: '456e7890-e89b-12d3-a456-426614174000',
+        update: jest.fn().mockResolvedValue(true)
       };
       mockProduct.create.mockResolvedValue(createdProduct as any);
 
@@ -190,12 +254,25 @@ describe('ProductController', () => {
 
       // Verify cloudinary upload was not called
       expect(mockCloudUploader.upload).not.toHaveBeenCalled();
+
+      // Verify Asset.create was not called
+      expect(mockAsset.create).not.toHaveBeenCalled();
+
+      // Verify product update was called with undefined thumbnail
+      expect(createdProduct.update).toHaveBeenCalledWith({
+        thumbnail: undefined
+      });
+
+      // Verify response
+      expect(mockResponse.status).toHaveBeenCalledWith(201);
+      expect(mockResponse.json).toHaveBeenCalledWith({ message: 'New product added!' });
     });
 
     it('should handle cloudinary upload errors', async () => {
       // Mock Product.create
       const createdProduct = {
-        id: '456e7890-e89b-12d3-a456-426614174000'
+        id: '456e7890-e89b-12d3-a456-426614174000',
+        update: jest.fn().mockResolvedValue(true)
       };
       mockProduct.create.mockResolvedValue(createdProduct as any);
 
@@ -211,6 +288,50 @@ describe('ProductController', () => {
 
       // Verify error was passed to next middleware
       expect(mockNext).toHaveBeenCalledWith(uploadError);
+    });
+
+    it('should throw error when more than 5 images are uploaded', async () => {
+      // Mock more than 5 images
+      mockRequest.files = {
+        images: Array(6).fill(null).map((_, i) => 
+          createMockFile(`/tmp/test-image${i}.jpg`, 'image/jpeg')
+        )
+      };
+
+      // Mock Product.create
+      const createdProduct = {
+        id: '456e7890-e89b-12d3-a456-426614174000',
+        update: jest.fn().mockResolvedValue(true)
+      };
+      mockProduct.create.mockResolvedValue(createdProduct as any);
+
+      // Expect the function to throw an error directly
+      await expect(listNewProduct(
+        mockRequest as Request,
+        mockResponse as Response,
+        mockNext
+      )).rejects.toThrow('Image files can not be more than 5!');
+    });
+
+    it('should throw error for invalid file type', async () => {
+      // Mock invalid file type
+      mockRequest.files = {
+        images: [createMockFile('/tmp/test-file.txt', 'text/plain')]
+      };
+
+      // Mock Product.create
+      const createdProduct = {
+        id: '456e7890-e89b-12d3-a456-426614174000',
+        update: jest.fn().mockResolvedValue(true)
+      };
+      mockProduct.create.mockResolvedValue(createdProduct as any);
+
+      // Expect the function to throw an error directly
+      await expect(listNewProduct(
+        mockRequest as Request,
+        mockResponse as Response,
+        mockNext
+      )).rejects.toThrow('Invalid file type, files must be image type!');
     });
   });
 }); 

@@ -1,16 +1,59 @@
-import { Request, Response, NextFunction } from 'express';
-import { createNewUser, verifyEmail } from '../../api/controllers/authController';
-import User from '../../api/models/User';
-import AuthVerificationToken from '../../api/models/AuthVerificationToken';
-import HttpCode from '../../api/constants/httpCode';
-import Mail from '../../api/lib/mail';
+// Mock the entire models module and database
+jest.mock('../../api/models', () => ({
+  User: {
+    create: jest.fn(),
+    findOne: jest.fn(),
+    findByPk: jest.fn(),
+    findAll: jest.fn(),
+    destroy: jest.fn(),
+    update: jest.fn(),
+  },
+  Product: {
+    create: jest.fn(),
+    findOne: jest.fn(),
+    findByPk: jest.fn(),
+    findAll: jest.fn(),
+    destroy: jest.fn(),
+  },
+  Asset: {
+    create: jest.fn(),
+    findOne: jest.fn(),
+    findByPk: jest.fn(),
+    findAll: jest.fn(),
+    destroy: jest.fn(),
+  },
+  AuthVerificationToken: {
+    create: jest.fn(),
+    findOne: jest.fn(),
+    findByPk: jest.fn(),
+    findAll: jest.fn(),
+    destroy: jest.fn(),
+  },
+  PasswordResetToken: {
+    create: jest.fn(),
+    findOne: jest.fn(),
+    findByPk: jest.fn(),
+    findAll: jest.fn(),
+    destroy: jest.fn(),
+  },
+}));
 
-// Mock dependencies
-jest.mock('../../api/models/User');
-jest.mock('../../api/models/AuthVerificationToken');
+jest.mock('../../api/db', () => ({
+  sequelize: {
+    authenticate: jest.fn(),
+    sync: jest.fn(),
+  },
+}));
+
 jest.mock('../../api/lib/mail');
 jest.mock('crypto');
 jest.mock('dotenv/config');
+
+import { Request, Response, NextFunction } from 'express';
+import { createNewUser, verifyEmail } from '../../api/controllers/authController';
+import { User, AuthVerificationToken } from '../../api/models';
+import HttpCode from '../../api/constants/httpCode';
+import Mail from '../../api/lib/mail';
 
 const mockUser = User as jest.Mocked<typeof User>;
 const mockAuthVerificationToken = AuthVerificationToken as jest.Mocked<typeof AuthVerificationToken>;
@@ -104,12 +147,12 @@ describe('AuthController', () => {
       // Verify Mail was instantiated and send was called
       expect(mockMail).toHaveBeenCalledWith(
         ['test@example.com'],
-        'noreply@example.com',
-        expect.objectContaining({
-          subject: 'Verification Mail',
-          html: expect.stringContaining('http://localhost:3000/verify'),
-          category: 'Integration Test'
-        })
+        'verification@myapp.com',
+        {
+          category: 'Integration Test',
+          html: '<p>Click <a href=\"http://localhost:8000/verify.html?id=123e4567-e89b-12d3-a456-426614174000&token=mock-token\">here</a> to verify your email.</p>',
+          subject: 'Verification Mail'
+        }
       );
 
       // Verify response was sent correctly
