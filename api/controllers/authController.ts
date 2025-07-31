@@ -274,18 +274,20 @@ export const signOut: RequestHandler = async (request, response, next) => {
   const { refreshToken } = request.body;
   try {
     // Remove the refresh token
-    const user = await User.findOne({
-      where: {
-        id: request.user.id as string,
-        tokens: { [Op.contains]: [refreshToken] },
-      },
-    });
+    const user = await User.findByPk(request.user.id as string);
     if (!user)
       throw new HttpError(
         "Unauthorized request, user not found",
         HttpCode.FORBIDDEN
       );
-    const newTokens = user.tokens.filter((token) => token !== refreshToken);
+    
+    if (!user.tokens.includes(refreshToken)) {
+      throw new HttpError(
+        "Invalid refresh token",
+        HttpCode.FORBIDDEN
+      );
+    }
+    const newTokens = user?.tokens.filter((token) => token !== refreshToken);
     user.tokens = newTokens;
     await user.save();
     response.status(HttpCode.OK).json({ message: "You're signed out" });
