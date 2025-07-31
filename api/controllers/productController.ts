@@ -325,7 +325,14 @@ export const getProductDetail: RequestHandler = async (req, res, next) => {
         {
           model: User,
           as: "owner",
-          attributes: ["id", "name", "avatar"],
+          attributes: ["id", "name"],
+          include: [
+            {
+              model: Asset,
+              as: "avatar",
+              attributes: ["url"]
+            }
+          ]
         },
         {
           model: Asset,
@@ -334,7 +341,6 @@ export const getProductDetail: RequestHandler = async (req, res, next) => {
       ],
     });
     if (!product) throw new HttpError("Product Not Found!", HttpCode.NOT_FOUND);
-    const user = await User.findByPk(product.user_id);
     res.json({
       product: {
         id: product.id,
@@ -345,7 +351,11 @@ export const getProductDetail: RequestHandler = async (req, res, next) => {
         date: product.purchasingDate,
         price: product.price,
         image: product.assets?.map((asset) => asset.url),
-        seller: { ...user },
+        seller: {
+          id: (product as any).owner?.id,
+          name: (product as any).owner?.name,
+          avatar: (product as any).owner?.avatar?.url,
+        },
       },
     });
   } catch (error) {

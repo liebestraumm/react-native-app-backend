@@ -1,6 +1,7 @@
 import { RequestHandler } from "express";
 import { Conversation, Chat } from "../models/Conversation";
 import User from "../models/User";
+import Asset from "../models/Asset";
 import { HttpError } from "../lib/HttpError";
 import HttpCode from "../constants/httpCode";
 import { Op } from "sequelize";
@@ -64,13 +65,26 @@ export const getOrCreateConversation: RequestHandler = async (req, res, next) =>
       defaults: { participantsId }
     });
 
-    // If conversation was just created, add participants to the junction table
-    if (created) {
-      // Add participants to the junction table
-      const participantUsers = await User.findAll({
-        where: { id: { [Op.in]: participants as string[] } }
-      });
-      await (conversation as any).$add('participants', participantUsers);
+    // Always ensure participants are added to the junction table
+    const participantUsers = await User.findAll({
+      where: { id: { [Op.in]: participants as string[] } }
+    });
+    
+    console.log('Participant users found:', participantUsers.map(u => u.id));
+    
+    // Check if participants are already in the conversation
+    const existingParticipants = await (conversation as any).getParticipants();
+    const existingParticipantIds = existingParticipants.map((p: any) => p.id);
+    
+    console.log('Existing participants:', existingParticipantIds);
+    
+    // Add only missing participants
+    const missingParticipants = participantUsers.filter(user => !existingParticipantIds.includes(user.id));
+    console.log('Missing participants:', missingParticipants.map(u => u.id));
+    
+    if (missingParticipants.length > 0) {
+      await (conversation as any).addParticipants(missingParticipants);
+      console.log('Added missing participants to conversation');
     }
 
     res.json({ conversationId: conversation.id });
@@ -87,7 +101,37 @@ export const getConversations: RequestHandler = async (req, res, next) => {
       throw new HttpError("Invalid conversation id!", HttpCode.UNPROCESSABLE_ENTITY);
     }
 
+    // First, check if the conversation exists and if the current user is a participant
+    console.log('Looking for conversation:', conversationId);
+    console.log('Current user ID:', req.user.id);
+    
     const conversation = await Conversation.findByPk(conversationId, {
+      include: [
+        {
+          model: User,
+          as: 'participants',
+          where: { id: req.user.id }
+        }
+      ]
+    });
+
+    console.log('Conversation found:', !!conversation);
+    console.log('Participants:', (conversation as any)?.participants?.map((p: any) => p.id));
+
+    if (!conversation) {
+      throw new HttpError("Conversation not found!", HttpCode.NOT_FOUND);
+    }
+
+    // Check if current user is a participant
+    const isParticipant = (conversation as any).participants?.some((participant: any) => participant.id === req.user.id);
+    console.log('Is participant:', isParticipant);
+    
+    if (!isParticipant) {
+      throw new HttpError("You are not a participant of this conversation!", HttpCode.FORBIDDEN);
+    }
+
+    // Now get the full conversation with chats and peer profile
+    const fullConversation = await Conversation.findByPk(conversationId, {
       include: [
         {
           model: Chat,
@@ -99,7 +143,7 @@ export const getConversations: RequestHandler = async (req, res, next) => {
               attributes: ['id', 'name'],
               include: [
                 {
-                  model: User,
+                  model: Asset,
                   as: 'avatar',
                   attributes: ['url']
                 }
@@ -114,30 +158,28 @@ export const getConversations: RequestHandler = async (req, res, next) => {
           attributes: ['id', 'name'],
           include: [
             {
-              model: User,
+              model: Asset,
               as: 'avatar',
               attributes: ['url']
             }
-          ],
-          where: {
-            id: { [Op.ne]: req.user.id }
-          }
+          ]
         }
       ]
     });
 
-    if (!conversation) {
+    if (!fullConversation) {
       throw new HttpError("Details not found!", HttpCode.NOT_FOUND);
     }
 
-    const peerProfile = (conversation as any).participants?.[0];
+    // Find the peer profile (the other participant)
+    const peerProfile = (fullConversation as any).participants?.find((participant: any) => participant.id !== req.user.id);
     if (!peerProfile) {
       throw new HttpError("Peer profile not found!", HttpCode.NOT_FOUND);
     }
 
     const finalConversation: ConversationResponse = {
-      id: conversation.id,
-      chats: (conversation as any).chats?.map((chat: any) => ({
+      id: fullConversation.id,
+      chats: (fullConversation as any).chats?.map((chat: any) => ({
         id: chat.id,
         text: chat.content,
         time: chat.timestamp.toISOString(),
@@ -180,7 +222,7 @@ export const getLastChats: RequestHandler = async (req, res, next) => {
               attributes: ['id', 'name'],
               include: [
                 {
-                  model: User,
+                  model: Asset,
                   as: 'avatar',
                   attributes: ['url']
                 }
@@ -208,7 +250,7 @@ export const getLastChats: RequestHandler = async (req, res, next) => {
             where: { id: conversation.id }
           },
           {
-            model: User,
+            model: Asset,
             as: 'avatar',
             attributes: ['url']
           }
