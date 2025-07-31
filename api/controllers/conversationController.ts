@@ -283,6 +283,7 @@ export const getLastChats: RequestHandler = async (req, res, next) => {
         },
       });
     }
+    console.log('CHATS:', chats);
 
     res.json({ chats });
   } catch (error) {

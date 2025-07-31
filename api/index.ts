@@ -12,6 +12,8 @@ import { Server } from "socket.io";
 import morgan from "morgan";
 import { verify, TokenExpiredError } from "jsonwebtoken";
 import { Conversation, Chat } from "./models/Conversation";
+import User from "./models/User";
+import { sequelize } from "./db";
 import conversationRouter from "./routes/conversation";
 const app = express();
 const server = http.createServer(app);
@@ -30,18 +32,24 @@ app.use("/api/conversation", conversationRouter);
 // SOCKET IO
 io.use((socket, next) => {
   const socketReq = socket.handshake.auth as { token: string } | undefined;
+  
+  // If no token provided, allow connection but mark as unauthenticated
   if (!socketReq?.token) {
-    return next(new Error("Unauthorized request!"));
+    socket.data.authenticated = false;
+    return next();
   }
 
   try {
     socket.data.jwtDecode = verify(socketReq.token, envs.JWT_SECRET!);
+    socket.data.authenticated = true;
   } catch (error) {
     if (error instanceof TokenExpiredError) {
-      return next(new Error("jwt expired"));
+      socket.data.authenticated = false;
+      socket.data.authError = "jwt expired";
+    } else {
+      socket.data.authenticated = false;
+      socket.data.authError = "Invalid token!";
     }
-
-    return next(new Error("Invalid token!"));
   }
 
   next();
@@ -102,38 +110,129 @@ const updateSeenStatus = async (peerId: string, conversationId: string) => {
 };
 
 io.on("connection", (socket) => {
-  const socketData = socket.data as { jwtDecode: { id: string } };
-  const userId = socketData.jwtDecode.id;
+  const socketData = socket.data as { 
+    jwtDecode?: { id: string }; 
+    authenticated: boolean; 
+    authError?: string;
+  };
 
+  // Handle unauthenticated connections
+  if (!socketData.authenticated) {
+    if (socketData.authError) {
+      socket.emit("auth:error", { message: socketData.authError });
+    }
+    // Allow connection but don't join any rooms or handle authenticated events
+    return;
+  }
+
+  const userId = socketData.jwtDecode!.id;
   socket.join(userId);
+  console.log(`User ${userId} joined their room`);
+
+  // Handle disconnect
+  socket.on("disconnect", () => {
+    console.log(`User ${userId} disconnected`);
+    // Socket.IO automatically handles cleanup on disconnect
+  });
+
+  // Handle connection status
+  socket.on("chat:status", async () => {
+    const allSockets = await io.fetchSockets();
+    const onlineUsers = allSockets.map(s => s.data.jwtDecode?.id).filter(Boolean);
+    console.log(`Online users: ${onlineUsers.join(', ')}`);
+    socket.emit("chat:status", { onlineUsers });
+  });
 
   // console.log("user is connected");
   socket.on("chat:new", async (data: IncomingMessage) => {
     const { conversationId, to, message } = data;
+    
+    console.log(`Received chat message from ${message.user.id} to ${to} in conversation ${conversationId}`);
+    console.log(`Message content: ${message.text}`);
 
-    // Create a new chat message using Sequelize
-    await Chat.create({
-      conversationId,
-      sentBy: message.user.id,
-      content: message.text,
-      timestamp: new Date(message.time),
-      viewed: false,
-    });
+    // Use database transaction for data consistency
+    const transaction = await sequelize.transaction();
+    
+    try {
+      // Validate conversation exists and user is participant
+      const conversation = await Conversation.findByPk(conversationId, {
+        include: [
+          {
+            model: User,
+            as: 'participants',
+            where: { id: message.user.id }
+          }
+        ],
+        transaction
+      });
 
-    const messageResponse: OutgoingMessageResponse = {
-      from: message.user,
-      conversationId,
-      message: { ...message, viewed: false },
-    };
+      if (!conversation) {
+        throw new Error(`Conversation ${conversationId} not found or user ${message.user.id} is not a participant`);
+      }
 
-    socket.to(to).emit("chat:message", messageResponse);
+      // Create a new chat message using Sequelize with transaction
+      const newChat = await Chat.create({
+        conversationId,
+        sentBy: message.user.id,
+        content: message.text,
+        timestamp: new Date(message.time),
+        viewed: false,
+      }, { transaction });
+
+      console.log(`Chat message saved to database with ID: ${newChat.id}`);
+
+      // Commit the transaction
+      await transaction.commit();
+
+      const messageResponse: OutgoingMessageResponse = {
+        from: message.user,
+        conversationId,
+        message: { ...message, id: newChat.id, viewed: false },
+      };
+
+      // Emit to sender for confirmation
+      socket.emit("chat:message", messageResponse);
+      console.log(`Message confirmation sent to sender ${message.user.id}`);
+      
+      // Check if recipient is online and emit message
+      const recipientSockets = await io.in(to).fetchSockets();
+      if (recipientSockets.length > 0) {
+        socket.to(to).emit("chat:message", messageResponse);
+        console.log(`Message sent to recipient ${to} (online)`);
+      } else {
+        console.log(`Recipient ${to} is offline, message saved to database`);
+      }
+      
+      // Verify message was saved by querying it back
+      const savedMessage = await Chat.findByPk(newChat.id);
+      if (savedMessage) {
+        console.log(`Message verified in database: ${savedMessage.content}`);
+      } else {
+        console.error(`Message not found in database after saving: ${newChat.id}`);
+      }
+
+    } catch (error) {
+      // Rollback transaction on error
+      await transaction.rollback();
+      console.error("Error sending chat message:", error);
+      socket.emit("chat:error", { 
+        message: "Failed to send message", 
+        details: error instanceof Error ? error.message : "Unknown error" 
+      });
+    }
   });
 
   socket.on(
     "chat:seen",
     async ({ conversationId, messageId, peerId }: SeenData) => {
-      await updateSeenStatus(peerId, conversationId);
-      socket.to(peerId).emit("chat:seen", { conversationId, messageId });
+      try {
+        await updateSeenStatus(peerId, conversationId);
+        socket.to(peerId).emit("chat:seen", { conversationId, messageId });
+        console.log(`Marked messages as seen in conversation ${conversationId} by user ${userId}`);
+      } catch (error) {
+        console.error("Error updating seen status:", error);
+        socket.emit("chat:error", { message: "Failed to update seen status" });
+      }
     }
   );
 
@@ -175,7 +274,7 @@ app.use(
 
 const startServer = async () => {
   try {
-    app.listen(envs.PORT ?? 8000, () => {
+    server.listen(envs.PORT ?? 8000, () => {
       console.log(`App running on port ${envs.PORT ?? 8000}!`);
     });
   } catch (err) {
