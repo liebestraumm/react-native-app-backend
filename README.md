@@ -1,6 +1,6 @@
 # UGM Backend API
 
-A Node.js backend application built with Express, TypeScript, and Sequelize ORM.
+A Node.js backend application built with Express, TypeScript, Sequelize ORM and Socket.IO that serves the UGM frontend: https://github.com/liebestraumm/ugm-frontend. UGM is an app from which anyone can post the goods they are selling and users can chat to each other.
 
 ## Getting Started
 
